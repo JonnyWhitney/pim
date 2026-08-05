@@ -185,6 +185,10 @@ function M.new_session()
 end
 
 local function can_change_session()
+	if require("pim.ui.tree").is_open() then
+		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
+		return false
+	end
 	local state = require("pim.state").get()
 	if not state.is_streaming and not state.is_compacting and not state.bash_running and not state.retrying then
 		return true

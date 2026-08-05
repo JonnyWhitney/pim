@@ -96,4 +96,63 @@ function M.flatten(tree, leaf_id)
 	return rows
 end
 
+---@param tree table[]
+---@param entry_id string
+---@return table[]|nil
+function M.path(tree, entry_id)
+	local entries = {}
+
+	local function visit(nodes)
+		for _, node in ipairs(nodes or {}) do
+			local entry = node.entry
+			if type(entry) == "table" then
+				entries[#entries + 1] = entry
+				if entry.id == entry_id or visit(node.children) then
+					return true
+				end
+				entries[#entries] = nil
+			end
+		end
+		return false
+	end
+
+	return visit(tree) and entries or nil
+end
+
+---@param tree table[]
+---@param entry_id string
+---@return table[]|nil
+function M.preview_messages(tree, entry_id)
+	local entries = M.path(tree, entry_id)
+	if not entries then
+		return nil
+	end
+
+	local messages = {}
+	for _, entry in ipairs(entries) do
+		if entry.type == "message" and type(entry.message) == "table" then
+			messages[#messages + 1] = entry.message
+		elseif entry.type == "compaction" then
+			messages[#messages + 1] = {
+				role = "compactionSummary",
+				summary = entry.summary,
+				tokensBefore = entry.tokensBefore,
+			}
+		elseif entry.type == "branch_summary" then
+			messages[#messages + 1] = {
+				role = "branchSummary",
+				summary = entry.summary,
+			}
+		elseif entry.type == "custom_message" then
+			messages[#messages + 1] = {
+				role = "custom",
+				customType = entry.customType,
+				content = entry.content,
+				display = entry.display,
+			}
+		end
+	end
+	return messages
+end
+
 return M

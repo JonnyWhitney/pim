@@ -44,6 +44,82 @@ return {
 		h.eq(start_line, vim.api.nvim_win_get_cursor(layout.transcript_win())[1], "k moves to the previous entry")
 	end,
 
+	["p previews the selected entry and q returns to the tree"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		feed("jjp")
+		h.wait_until(function()
+			return transcript_text():find("# pi tree preview", 1, true) ~= nil
+		end, "the preview to open", 5000)
+		h.ok(transcript_text():find("Fix the parser error", 1, true), "preview shows the selected conversation")
+		h.eq(true, tree.is_open(), "preview keeps tree mode active")
+		h.eq(false, vim.bo[layout.input_buf()].modifiable, "preview keeps the input locked")
+
+		feed("q")
+		h.wait_until(function()
+			return transcript_text():find("# pi tree", 1, true) ~= nil
+		end, "the tree to return", 5000)
+		h.eq("tree-3", tree.selected().id, "the selected entry is preserved")
+	end,
+
+	["r forks the selected user prompt"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		feed("jjr")
+		h.wait_until(function()
+			return not tree.is_open()
+				and state.get().session_id == "forked-session"
+				and table.concat(vim.api.nvim_buf_get_lines(layout.input_buf(), 0, -1, false), "\n")
+					== "Fix the parser error"
+		end, "the selected prompt to fork", 5000)
+	end,
+
+	["c clones the active branch"] = function()
+		start_pim()
+		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "discard this draft" })
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		feed("c")
+		h.wait_until(function()
+			return not tree.is_open()
+				and state.get().session_id == "cloned-session"
+				and table.concat(vim.api.nvim_buf_get_lines(layout.input_buf(), 0, -1, false), "\n") == ""
+		end, "the active branch to clone", 5000)
+	end,
+
+	["external session actions are blocked while the tree is open"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		local calls = 0
+		local real_clone = client.clone
+		client.clone = function()
+			calls = calls + 1
+		end
+		local notified
+		local real_notify = vim.notify
+		vim.notify = function(message)
+			notified = message
+		end
+
+		local ok, err = pcall(require("pim").clone)
+		client.clone = real_clone
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq(0, calls)
+		h.eq(true, tree.is_open())
+		h.ok(notified:find("Close the tree", 1, true), "blocked action explains how to continue")
+	end,
+
 	["tree blocks prompt submission and q restores the active transcript"] = function()
 		start_pim()
 		tree.open()

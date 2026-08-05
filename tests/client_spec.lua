@@ -57,7 +57,7 @@ return {
 		client.get_fork_messages(function(success, data)
 			result.messages = { success = success, data = data }
 		end)
-		client.fork("fork-2", function(success, data)
+		client.fork("tree-3", function(success, data)
 			result.fork = { success = success, data = data }
 		end)
 		client.clone(function(success, data)

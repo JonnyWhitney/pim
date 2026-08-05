@@ -43,6 +43,57 @@ return {
 		h.eq("● └─ pi: Second answer", rows[3].line)
 	end,
 
+	["preview messages follow only the selected branch"] = function()
+		local data = {
+			{
+				entry = { type = "message", id = "one", message = { role = "user", content = "Start work" } },
+				children = {
+					{
+						entry = { type = "compaction", id = "two", summary = "Older work", tokensBefore = 100 },
+						children = {
+							{
+								entry = {
+									type = "message",
+									id = "three",
+									message = {
+										role = "assistant",
+										content = { { type = "text", text = "Chosen answer" } },
+									},
+								},
+								children = {},
+							},
+						},
+					},
+					{
+						entry = {
+							type = "message",
+							id = "other",
+							message = { role = "assistant", content = { { type = "text", text = "Other answer" } } },
+						},
+						children = {},
+					},
+				},
+			},
+		}
+
+		local path = tree.path(data, "three")
+		h.eq(
+			{ "one", "two", "three" },
+			vim.tbl_map(function(entry)
+				return entry.id
+			end, path)
+		)
+
+		local messages = assert(tree.preview_messages(data, "three"))
+		h.eq(
+			{ "user", "compactionSummary", "assistant" },
+			vim.tbl_map(function(message)
+				return message.role
+			end, messages)
+		)
+		h.eq(nil, tree.preview_messages(data, "missing"))
+	end,
+
 	["summaries identify session entry types"] = function()
 		h.eq(
 			"You: an empty prompt",

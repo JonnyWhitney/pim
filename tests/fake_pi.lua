@@ -38,8 +38,8 @@ local function tool_result(text)
 end
 
 local fork_messages = {
-	{ entryId = "fork-1", text = "Start the parser" },
-	{ entryId = "fork-2", text = "Fix the parser error" },
+	{ entryId = "tree-1", text = "Start the parser" },
+	{ entryId = "tree-3", text = "Fix the parser error" },
 }
 
 local function messages_for_session()

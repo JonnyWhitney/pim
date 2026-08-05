@@ -55,6 +55,10 @@ function M.model()
 end
 
 function M.fork()
+	if require("pim.ui.tree").is_open() then
+		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
+		return
+	end
 	local client = require("pim.rpc.client")
 	local state = require("pim.state").get()
 	if state.is_streaming or state.is_compacting or state.bash_running or state.retrying then

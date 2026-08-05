@@ -63,6 +63,13 @@ session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 | `:PiStop[!]` | Stop pi and close the pi windows. `!` skips confirmation. |
 | `:PiLog` | Open the event log. Set `debug = true` for raw JSONL traffic. |
 
+### Tree explorer
+
+`:PiTree` replaces the transcript with the active session tree and disables
+prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
+fork a selected user prompt, and `c` to clone the active branch. In a preview,
+`q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
+
 ## Keymaps
 
 All keymaps apply only to pim buffers. You can change them in `setup()`.
