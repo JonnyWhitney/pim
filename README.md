@@ -18,7 +18,7 @@ For lazy.nvim:
 ```lua
 {
   "JonnyWhitney/pim",
-  cmd = { "PiStart", "PiToggle", "PiResume", "PiModel", "PiThinking", "PiLog" },
+  cmd = { "PiStart", "PiToggle", "PiResume", "PiTree", "PiFork", "PiClone", "PiModel", "PiThinking", "PiLog" },
   -- opts = { ... }, -- See Configuration. setup() is optional.
 }
 ```
@@ -53,12 +53,22 @@ session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 | `:PiSend [text]` | Send text. Without text, send the input buffer. |
 | `:PiAbort` | Stop the current agent run. |
 | `:PiResume` | Select a session for the current directory. |
+| `:PiTree` | Browse the active session tree. Prompts are disabled while it is open. |
 | `:PiNewSession` | Start a new session. |
+| `:PiFork` | Fork from an earlier prompt and edit that prompt in a new session. |
+| `:PiClone` | Copy the active branch into a new session. |
 | `:PiModel` | Select a model. |
 | `:PiThinking` | Select a supported thinking level. |
 | `:PiRestart` | Restart pi and resume the current session. |
 | `:PiStop[!]` | Stop pi and close the pi windows. `!` skips confirmation. |
 | `:PiLog` | Open the event log. Set `debug = true` for raw JSONL traffic. |
+
+### Tree explorer
+
+`:PiTree` replaces the transcript with the active session tree and disables
+prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
+fork a selected user prompt, and `c` to clone the active branch. In a preview,
+`q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
 
 ## Keymaps
 

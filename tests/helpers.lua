@@ -52,6 +52,7 @@ function M.reset_all()
 	end
 	require("pim.ui.dialogs").reset()
 	require("pim.ui.transcript").reset()
+	require("pim.ui.tree").reset()
 	require("pim.ui.layout").close()
 	require("pim.events").reset()
 	require("pim.state").reset()

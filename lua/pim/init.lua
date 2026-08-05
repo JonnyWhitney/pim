@@ -58,6 +58,7 @@ local function connect(extra_args)
 		on_ui_request = require("pim.ui.dialogs").handle,
 		on_exit = function(code, intentional, stderr_tail)
 			require("pim.ui.dialogs").reset()
+			require("pim.ui.tree").reset()
 			transcript.divider(("*pi exited (code %d%s)*"):format(code, intentional and ", requested" or ""))
 			---@type integer|PimStateNone
 			local exit_code = state.NONE
@@ -178,6 +179,56 @@ function M.new_session()
 		elseif type(data) == "table" and data.cancelled then
 			vim.notify("[pim] new session cancelled by an extension", vim.log.levels.WARN)
 		else
+			M.refresh()
+		end
+	end)
+end
+
+local function can_change_session()
+	if require("pim.ui.tree").is_open() then
+		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
+		return false
+	end
+	local state = require("pim.state").get()
+	if not state.is_streaming and not state.is_compacting and not state.bash_running and not state.retrying then
+		return true
+	end
+	vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
+	return false
+end
+
+---@param entry_id string
+function M.fork(entry_id)
+	if not can_change_session() then
+		return
+	end
+
+	require("pim.rpc.client").fork(entry_id, function(success, data)
+		if not success then
+			vim.notify("[pim] fork failed: " .. tostring(data), vim.log.levels.ERROR)
+		elseif type(data) == "table" and data.cancelled then
+			vim.notify("[pim] fork cancelled by an extension", vim.log.levels.WARN)
+		elseif type(data) ~= "table" or type(data.text) ~= "string" then
+			vim.notify("[pim] pi did not return the forked prompt", vim.log.levels.WARN)
+		else
+			require("pim.ui.input").replace(data.text)
+			M.refresh()
+		end
+	end)
+end
+
+function M.clone()
+	if not can_change_session() then
+		return
+	end
+
+	require("pim.rpc.client").clone(function(success, data)
+		if not success then
+			vim.notify("[pim] clone failed: " .. tostring(data), vim.log.levels.ERROR)
+		elseif type(data) == "table" and data.cancelled then
+			vim.notify("[pim] clone cancelled by an extension", vim.log.levels.WARN)
+		else
+			require("pim.ui.input").replace("")
 			M.refresh()
 		end
 	end)

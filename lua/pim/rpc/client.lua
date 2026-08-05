@@ -265,6 +265,23 @@ function M.new_session(callback)
 	M.request("new_session", nil, callback)
 end
 
+function M.get_fork_messages(callback)
+	M.request("get_fork_messages", nil, callback)
+end
+
+function M.get_tree(callback)
+	M.request("get_tree", nil, callback)
+end
+
+---@param entry_id string
+function M.fork(entry_id, callback)
+	M.request("fork", { entryId = entry_id }, callback)
+end
+
+function M.clone(callback)
+	M.request("clone", nil, callback)
+end
+
 ---@param message string
 ---@param opts { images: table[]|nil, streaming_behavior: "steer"|"followUp"|nil }|nil
 function M.prompt(message, opts, callback)
