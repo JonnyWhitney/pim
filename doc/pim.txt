@@ -1,0 +1,242 @@
+*pim.txt*    Use the pi coding agent from Neovim
+
+Author:  Jonathan Loughlin
+License: MIT
+
+==============================================================================
+CONTENTS                                                        *pim-toc*
+
+  1. Introduction ................................. |pim-introduction|
+  2. Commands ..................................... |pim-commands|
+  3. Keymaps ...................................... |pim-keymaps|
+     Shell commands ............................... |pim-shell|
+  4. Configuration ................................ |pim-configuration|
+  5. Completion ................................... |pim-completion|
+  6. Extension dialogs ............................ |pim-dialogs|
+  7. Troubleshooting .............................. |pim-troubleshooting|
+
+==============================================================================
+1. INTRODUCTION                                        *pim-introduction*
+
+pim runs the pi coding agent in Neovim. pi runs as a child process in RPC
+mode. pim uses `pi --mode rpc` and JSONL over standard input and output.
+
+pim shows the conversation in a read-only Markdown transcript. Write
+prompts in the Neovim input buffer below the transcript.
+
+pim targets Neovim nightly and requires the `pi` command. It has no plugin
+dependencies. Other Neovim releases are not supported.
+
+The transcript winbar shows the provider, model, thinking level, and pi
+configuration directory. pim uses $PI_CODING_AGENT_DIR when it is set. It
+uses ~/.pi/agent when that variable is unset.
+
+Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
+>sh
+    alias pim='nvim -c PiStart'
+<
+
+==============================================================================
+2. COMMANDS                                                *pim-commands*
+
+:PiStart                                                            *:PiStart*
+    Open the pi UI. Start pi if it is not running. The cursor moves to the
+    input buffer in Normal mode.
+
+    pim reuses an empty initial tab. If one pi window is closed, this
+    command restores it. It does not create a second pi layout.
+
+:PiToggle                                                          *:PiToggle*
+    Show or hide the pi windows. pi continues to run while the windows hide.
+
+:PiSend [{text}]                                                     *:PiSend*
+    Send {text} as a prompt. Without {text}, send the input buffer contents.
+
+:PiAbort                                                            *:PiAbort*
+    Stop the current agent run. Stop a shell command first when one is active.
+
+:PiResume                                                          *:PiResume*
+    Select a session for the current working directory. pim loads the
+    selected session history into the transcript.
+
+:PiNewSession                                                  *:PiNewSession*
+    Start a new session. The transcript clears. pi continues to run.
+
+:PiModel                                                            *:PiModel*
+    Select an available pi model. pim marks the current model.
+
+:PiThinking                                                      *:PiThinking*
+    Select a thinking level that the current model supports. pim gets this
+    list from pi. Older pi versions use a compatible fallback list.
+
+:PiRestart                                                        *:PiRestart*
+    Restart pi. pim resumes the current session if its session file exists.
+
+:PiStop[!]                                                           *:PiStop*
+    Stop pi and close the pi windows. pim asks for confirmation. Use [!]
+    to skip confirmation. See |pim-leaving|.
+
+:PiLog                                                                *:PiLog*
+    Open the event log in a split. Set `debug = true` to include raw JSONL
+    traffic.
+
+                                                            *pim-leaving*
+Leaving ~
+
+Closing the input window has the same effect as |:PiStop|. pim asks for
+confirmation first. `:PiStop!` skips confirmation.
+
+After confirmation, pim closes the pi windows with :quit. Neovim closes
+the tab when it has no windows. Neovim exits when it has no tabs. Unsaved
+changes can stop the exit, as with |:quit|.
+
+The session file remains after the UI closes. Use |:PiStart| to resume the
+session. Use |:PiToggle| to hide the UI without stopping pi.
+
+==============================================================================
+3. KEYMAPS                                                  *pim-keymaps*
+
+All keymaps apply only to pi buffers. Set different keymaps in
+|pim-setup|. The default keymaps follow.
+
+  Normal <CR><CR>      input       Send the prompt.
+  <localleader><CR>    input       Send a follow-up after the current run.
+  <C-c>                pi buffers  Stop the shell command or agent run.
+  <Tab>                transcript  Toggle the fold at the cursor.
+  <Up> / <Down>        input       Move through prompt history at the first
+                                   or last line.
+
+Insert-mode <CR> inserts a new line. pim does not remap Esc.
+
+pim clears the input after you send it. If pi rejects the prompt, pim
+restores it when the input remains empty. If you enter new text, press <Up> to
+recall the rejected prompt.
+
+                                                              *pim-shell*
+Shell commands ~
+
+A prompt that starts with `!` runs as a shell command in pi. A prompt that
+starts with `!!` does not add output to the next agent context.
+>
+  !ls -la     Run the command. Add output to the next prompt context.
+  !!ls -la    Run the command. Do not add output to the prompt context.
+<
+The command uses pi's working directory and environment. pim shows the
+output in a fold. A nonzero exit shows `[exit N]`. The `!!` form shows
+`[not in context]`. `<C-c>` stops a running command.
+
+Set `bash_passthrough = false` to send these prompts to the agent unchanged.
+
+==============================================================================
+4. CONFIGURATION                                      *pim-configuration*
+                                                              *pim-setup*
+
+Calling setup() is optional. All options have default values.
+>lua
+  require("pim").setup({
+    pi_cmd = "pi",              -- String or list. pim adds --mode rpc.
+    args = {},                  -- Additional pi command-line arguments.
+    keymaps = {
+      submit = "<CR><CR>",
+      submit_followup = "<localleader><CR>",
+      abort = "<C-c>",
+      toggle_fold = "<Tab>",
+    },
+    input = { min_height = 3, max_height = 15 },
+    streaming_submit = "steer", -- Or "followUp".
+    bash_passthrough = true,    -- Run prompts that start with ! or !! as shell commands.
+    transcript = {
+      tools_collapsed = true,   -- Fold tool output after the tool ends.
+      show_thinking = "folded", -- "folded", "open", or "hidden".
+    },
+    set_title = false,          -- Allow extensions to set 'titlestring'.
+    debug = false,              -- Record raw RPC traffic for :PiLog.
+  })
+<
+Invalid option values cause an error. Unknown option keys cause a warning. The
+warning suggests a key when pim finds a close match.
+>
+  [pim] ignoring unknown config keys:
+    keymap — did you mean "keymaps"?
+<
+The warning does not stop setup(). Valid options still apply.
+
+==============================================================================
+5. COMPLETION                                            *pim-completion*
+
+The input buffer has an 'omnifunc'. It can start automatically in two cases.
+
+- Type `/` as the first prompt character to complete pi slash commands. This
+  includes extensions, prompt templates, and skills.
+- Type `@` at the start of a word to complete a file path. pim uses
+  `git ls-files` in a Git repository. Elsewhere it uses Neovim file completion.
+
+pi expands @file references on the server. CTRL-X CTRL-O starts either
+completion manually.
+
+==============================================================================
+6. EXTENSION DIALOGS                                        *pim-dialogs*
+
+Extensions send UI requests through pi. pim displays these requests.
+
+- select and confirm requests use |vim.ui.select()|.
+- input requests use |vim.ui.input()|.
+- editor requests open a scratch split. <CR><CR> submits and q cancels.
+
+Plugins that change vim.ui.* can change these dialogs. The winbar shows
+extension status entries and the first line of extension widgets.
+
+pi resolves a timed-out dialog with its default response. pim then
+abandons the dialog. pim sends cancellation for an unknown request method.
+This prevents a newer extension from waiting without a response.
+
+==============================================================================
+7. TROUBLESHOOTING                                  *pim-troubleshooting*
+
+Use these commands to check pim:
+>
+  :checkhealth pim    Check Neovim, pi, and the session directory.
+  :PiLog                  Show pim events and pi messages.
+<
+Set `debug = true` in |pim-setup| to record all raw JSONL lines.
+
+pi does not start ~
+
+Check `pi_cmd`. The transcript shows the error and remains open. Correct the
+setting and run |:PiRestart|. Use |:checkhealth| to check the pi command.
+
+pi stops ~
+
+The winbar shows the exit code. The notification includes recent pi standard
+error output. Run |:PiRestart| to resume the session.
+
+The transcript does not update ~
+
+Check |:PiLog| for handler errors. pim handles each incoming message
+separately. A bad message does not stop later messages. Reopen the UI if the
+transcript buffer was deleted.
+
+pi does not respond ~
+
+pim fails an unanswered command after 30 seconds. It shows `pi did not
+respond`. Shell commands do not have this timeout because their response waits
+for the command to end.
+
+A message is missing ~
+
+pim drops an unterminated line after 8 MiB. It then reads the next line.
+Check |:PiLog| and verify that `pi_cmd` starts pi.
+
+An option has no effect ~
+
+Check |:messages| for an unknown-option warning. See |pim-configuration|.
+
+Known limitations ~
+
+The built-in |vim.ui.select()| cannot close automatically after a timeout. pi
+has already selected its default response. This affects appearance only. UI
+plugins can provide automatic closing.
+
+Queued steer and follow-up messages use virtual lines. You cannot yank them.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

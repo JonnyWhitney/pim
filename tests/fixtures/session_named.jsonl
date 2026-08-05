@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"aaaa-1111","timestamp":"2026-07-01T10:00:00.000Z","cwd":"/tmp/proj"}
+{"type":"message","id":"m1","parentId":null,"timestamp":"2026-07-01T10:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"fix the parser bug"}],"timestamp":1}}
+{"type":"message","id":"m2","parentId":"m1","timestamp":"2026-07-01T10:00:05.000Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"api":"x","provider":"p","model":"m","usage":{},"stopReason":"stop","timestamp":2}}
+{"type":"session_info","id":"m3","parentId":"m2","timestamp":"2026-07-01T10:00:06.000Z","name":"parser work"}
+{"type":"message","id":"m4","parentId":"m3","timestamp":"2026-07-01T10:00:07.000Z","message":{"role":"user","content":[{"type":"text","text":"thanks"}],"timestamp":3}}

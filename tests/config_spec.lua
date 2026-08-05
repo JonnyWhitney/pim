@@ -1,0 +1,144 @@
+local h = require("helpers")
+local config = require("pim.config")
+
+local function setup_capturing_warning(opts)
+	local captured = nil
+	local real_notify = vim.notify
+	vim.notify = function(message, level)
+		if level == vim.log.levels.WARN then
+			captured = message
+		end
+	end
+	local ok, err = pcall(config.setup, opts)
+	vim.notify = real_notify
+	h.ok(ok, "setup() raised: " .. tostring(err))
+	return captured
+end
+
+local function with_agent_dir(directory, fn)
+	local original = vim.env.PI_CODING_AGENT_DIR
+	vim.env.PI_CODING_AGENT_DIR = directory
+	local ok, err = pcall(fn)
+	vim.env.PI_CODING_AGENT_DIR = original
+	if not ok then
+		error(err, 0)
+	end
+end
+
+return {
+	["pi config directory uses PI_CODING_AGENT_DIR and shortens home"] = function()
+		with_agent_dir(vim.fs.joinpath(vim.fn.expand("~"), ".pi-personal", "agent"), function()
+			h.eq("~/.pi-personal/agent", config.pi_config_dir())
+		end)
+	end,
+
+	["pi config directory falls back to pi default"] = function()
+		with_agent_dir(nil, function()
+			h.eq("~/.pi/agent", config.pi_config_dir())
+		end)
+	end,
+
+	["get() without setup() returns the defaults"] = function()
+		h.eq(config.defaults, config.get())
+	end,
+
+	["a non-table option group fails with our own message"] = function()
+		for _, group in ipairs({ "keymaps", "input", "transcript" }) do
+			h.fails(function()
+				config.setup({ [group] = "oops" })
+			end, "invalid config: " .. group .. " must be a table")
+		end
+	end,
+
+	["setup() merges nested options over defaults"] = function()
+		local opts = config.setup({ input = { min_height = 5 } })
+		h.eq(5, opts.input.min_height)
+		h.eq(config.defaults.input.max_height, opts.input.max_height)
+		h.eq(config.defaults.streaming_submit, opts.streaming_submit)
+	end,
+
+	["setup() does not mutate the defaults table"] = function()
+		config.setup({ keymaps = { submit = "<C-s>" } })
+		h.eq("<CR><CR>", config.defaults.keymaps.submit)
+	end,
+
+	["setup() result is what get() returns"] = function()
+		local opts = config.setup({ debug = true })
+		h.ok(config.get() == opts)
+		h.eq(true, config.get().debug)
+	end,
+
+	["rejects invalid streaming_submit"] = function()
+		h.fails(function()
+			config.setup({ streaming_submit = "queue" })
+		end, "streaming_submit")
+	end,
+
+	["rejects invalid show_thinking"] = function()
+		h.fails(function()
+			config.setup({ transcript = { show_thinking = "sometimes" } })
+		end, "show_thinking")
+	end,
+
+	["rejects max_height below min_height"] = function()
+		h.fails(function()
+			config.setup({ input = { min_height = 10, max_height = 2 } })
+		end, "max_height")
+	end,
+
+	["rejects empty pi_cmd list"] = function()
+		h.fails(function()
+			config.setup({ pi_cmd = {} })
+		end, "pi_cmd")
+	end,
+
+	["an unknown top-level key warns and suggests the real one"] = function()
+		local warning = setup_capturing_warning({ keymap = { submit = "<C-s>" } })
+
+		h.ok(warning ~= nil, "a warning was emitted")
+		h.ok(warning:find("keymap", 1, true), "names the offending key")
+		h.ok(warning:find('did you mean "keymaps"', 1, true), "suggests the real key, got: " .. warning)
+	end,
+
+	["an unknown nested key is reported by its full path"] = function()
+		local warning = setup_capturing_warning({ keymaps = { submitt = "<C-s>" } })
+
+		h.ok(warning ~= nil, "a warning was emitted")
+		h.ok(warning:find("keymaps.submitt", 1, true), "reports the dotted path, got: " .. warning)
+		h.ok(warning:find('did you mean "submit"', 1, true), "suggests the real key")
+	end,
+
+	["a typo with no plausible match is reported without a guess"] = function()
+		local warning = setup_capturing_warning({ zzzzzzz = true })
+
+		h.ok(warning:find("zzzzzzz", 1, true), "names the offending key")
+		h.ok(not warning:find("did you mean", 1, true), "no wild guess, got: " .. warning)
+	end,
+
+	["an unknown key still leaves the rest of the config working"] = function()
+		setup_capturing_warning({ keymap = {}, input = { min_height = 7 } })
+
+		h.eq(7, config.get().input.min_height, "valid options still applied")
+		h.eq("<CR><CR>", config.get().keymaps.submit, "defaults intact")
+	end,
+
+	["list-valued options are not treated as key sets"] = function()
+		h.eq(nil, setup_capturing_warning({ args = { "--no-session", "--foo" } }))
+	end,
+
+	["a valid config warns about nothing"] = function()
+		h.eq(
+			nil,
+			setup_capturing_warning({
+				pi_cmd = "pi",
+				args = {},
+				keymaps = { submit = "<CR><CR>", abort = "<C-c>" },
+				input = { min_height = 3, max_height = 15 },
+				streaming_submit = "followUp",
+				transcript = { tools_collapsed = false, show_thinking = "open" },
+				set_title = true,
+				debug = true,
+			})
+		)
+	end,
+}

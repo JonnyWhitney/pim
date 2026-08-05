@@ -1,0 +1,2 @@
+{"type":"nonsense","hello":true}
+{"type":"message","id":"m1","message":{"role":"user","content":"should never be read"}}

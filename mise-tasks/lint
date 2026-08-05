@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Type-check the Lua sources with lua-language-server"
+set -euo pipefail
+
+# lua-language-server needs the Neovim runtime to type vim.* APIs. Resolve
+# that path at run time because it contains the local Neovim build ID. Keep
+# .luarc.json portable for editors.
+
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
+
+# Do not check tests/. Test helpers pass optional values directly to APIs.
+# Checking them hides warnings in shipped code with test-only warnings.
+nvim --clean --headless -c "lua
+	local config = vim.json.decode(table.concat(vim.fn.readfile('.luarc.json'), '\n'))
+	config['workspace.library'] = { vim.env.VIMRUNTIME .. '/lua' }
+	config['workspace.ignoreDir'] = { '.git', 'tests' }
+	vim.fn.writefile({ vim.json.encode(config) }, '$workdir/luarc.json')
+" -c 'qa!'
+
+# --check returns a nonzero status for each warning at --checklevel or above.
+lua-language-server --check "$PWD" \
+	--checklevel=Warning \
+	--configpath="$workdir/luarc.json" \
+	--logpath="$workdir/log"

@@ -1,0 +1,31 @@
+[tools]
+# Homebrew manages Neovim. tests/run.lua checks the required version.
+stylua = "2.5.2"
+lua-language-server = "3.18.2"
+
+[tasks.test]
+description = "Run the headless test suite"
+run = "nvim -l tests/run.lua"
+
+[tasks.check]
+description = "Run :checkhealth pim in a clean headless instance"
+run = """
+nvim --clean --headless \
+  -c 'set rtp+=.' \
+  -c 'checkhealth pim' \
+  -c 'lua io.write(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\\n") .. "\\n")' \
+  -c 'qa!'
+"""
+
+[tasks.verify]
+description = "Run every check: formatting, lint, tests, health"
+# Run checks in sequence. This shows the first failure without mixed output.
+run = ["mise run fmt:check", "mise run lint", "mise run test", "mise run check"]
+
+[tasks.fmt]
+description = "Format the Lua sources with stylua"
+run = "stylua lua plugin tests"
+
+[tasks."fmt:check"]
+description = "Fail if any Lua source is unformatted"
+run = "stylua --check lua plugin tests"
