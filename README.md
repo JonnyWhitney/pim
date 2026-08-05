@@ -18,7 +18,7 @@ For lazy.nvim:
 ```lua
 {
   "JonnyWhitney/pim",
-  cmd = { "PiStart", "PiToggle", "PiResume", "PiModel", "PiThinking", "PiLog" },
+  cmd = { "PiStart", "PiToggle", "PiResume", "PiFork", "PiClone", "PiModel", "PiThinking", "PiLog" },
   -- opts = { ... }, -- See Configuration. setup() is optional.
 }
 ```
@@ -54,6 +54,8 @@ session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 | `:PiAbort` | Stop the current agent run. |
 | `:PiResume` | Select a session for the current directory. |
 | `:PiNewSession` | Start a new session. |
+| `:PiFork` | Fork from an earlier prompt and edit that prompt in a new session. |
+| `:PiClone` | Copy the active branch into a new session. |
 | `:PiModel` | Select a model. |
 | `:PiThinking` | Select a supported thinking level. |
 | `:PiRestart` | Restart pi and resume the current session. |

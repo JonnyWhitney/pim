@@ -50,6 +50,32 @@ return {
 		h.ok(type(results.messages.messages) == "table", "messages list present")
 	end,
 
+	["fork and clone requests round-trip through pi"] = function()
+		start_fake()
+		local result = {}
+
+		client.get_fork_messages(function(success, data)
+			result.messages = { success = success, data = data }
+		end)
+		client.fork("fork-2", function(success, data)
+			result.fork = { success = success, data = data }
+		end)
+		client.clone(function(success, data)
+			result.clone = { success = success, data = data }
+		end)
+
+		wait_for(function()
+			return result.messages ~= nil and result.fork ~= nil and result.clone ~= nil
+		end, "fork and clone responses")
+
+		h.eq(true, result.messages.success)
+		h.eq("Fix the parser error", result.messages.data.messages[2].text)
+		h.eq(true, result.fork.success)
+		h.eq("Fix the parser error", result.fork.data.text)
+		h.eq(true, result.clone.success)
+		h.eq(false, result.clone.data.cancelled)
+	end,
+
 	["unknown command surfaces the error payload"] = function()
 		start_fake()
 		local result

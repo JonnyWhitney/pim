@@ -62,6 +62,13 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 :PiNewSession                                                  *:PiNewSession*
     Start a new session. The transcript clears. pi continues to run.
 
+:PiFork                                                                *:PiFork*
+    Select an earlier prompt. pi starts a new session at that prompt. pim
+    places the prompt in the input buffer so you can edit and send it.
+
+:PiClone                                                              *:PiClone*
+    Copy the active pi branch into a new session. The input buffer clears.
+
 :PiModel                                                            *:PiModel*
     Select an available pi model. pim marks the current model.
 

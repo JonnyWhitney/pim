@@ -35,6 +35,14 @@ vim.api.nvim_create_user_command("PiNewSession", function()
 	require("pim").new_session()
 end, { desc = "Start a new pi session" })
 
+vim.api.nvim_create_user_command("PiFork", function()
+	require("pim.ui.pickers").fork()
+end, { desc = "Fork pi from an earlier prompt" })
+
+vim.api.nvim_create_user_command("PiClone", function()
+	require("pim").clone()
+end, { desc = "Clone the current pi branch" })
+
 vim.api.nvim_create_user_command("PiModel", function()
 	require("pim.ui.pickers").model()
 end, { desc = "Pick the pi model" })

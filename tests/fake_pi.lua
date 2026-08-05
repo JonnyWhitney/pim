@@ -37,6 +37,22 @@ local function tool_result(text)
 	return { content = { { type = "text", text = text } } }
 end
 
+local fork_messages = {
+	{ entryId = "fork-1", text = "Start the parser" },
+	{ entryId = "fork-2", text = "Fix the parser error" },
+}
+
+local function messages_for_session()
+	if state.sessionId == "switched-session" then
+		return { user("old prompt"), assistant("old answer") }
+	elseif state.sessionId == "forked-session" then
+		return { user("Start the parser"), assistant("forked history") }
+	elseif state.sessionId == "cloned-session" then
+		return { user("Start the parser"), assistant("cloned history") }
+	end
+	return {}
+end
+
 local function run_tool_turn(cmd)
 	local call = { type = "toolCall", id = "call-1", name = "bash", arguments = { command = "ls" } }
 	send({ type = "response", id = cmd.id, command = "prompt", success = true })
@@ -192,17 +208,44 @@ local function handle(cmd)
 		local data = vim.tbl_extend("force", state, { fakeArgv = argv })
 		send({ type = "response", id = cmd.id, command = "get_state", success = true, data = data })
 	elseif cmd.type == "get_messages" then
-		local messages = {}
-		if state.sessionId == "switched-session" then
-			messages = { user("old prompt"), assistant("old answer") }
-		end
 		send({
 			type = "response",
 			id = cmd.id,
 			command = "get_messages",
 			success = true,
-			data = { messages = messages },
+			data = { messages = messages_for_session() },
 		})
+	elseif cmd.type == "get_fork_messages" then
+		send({
+			type = "response",
+			id = cmd.id,
+			command = "get_fork_messages",
+			success = true,
+			data = { messages = fork_messages },
+		})
+	elseif cmd.type == "fork" then
+		local text = nil
+		for _, message in ipairs(fork_messages) do
+			if message.entryId == cmd.entryId then
+				text = message.text
+				break
+			end
+		end
+		if not text then
+			send({ type = "response", id = cmd.id, command = "fork", success = false, error = "unknown fork entry" })
+			return
+		end
+		state.sessionId = "forked-session"
+		send({
+			type = "response",
+			id = cmd.id,
+			command = "fork",
+			success = true,
+			data = { text = text, cancelled = false },
+		})
+	elseif cmd.type == "clone" then
+		state.sessionId = "cloned-session"
+		send({ type = "response", id = cmd.id, command = "clone", success = true, data = { cancelled = false } })
 	elseif cmd.type == "switch_session" then
 		state.sessionId = "switched-session"
 		send({
@@ -330,7 +373,7 @@ local function handle(cmd)
 			id = cmd.id,
 			command = "get_session_stats",
 			success = true,
-			data = { sessionId = "fake-session-id", contextUsage = usage },
+			data = { sessionId = state.sessionId, contextUsage = usage },
 		})
 	elseif cmd.type == "bash" then
 		local command = tostring(cmd.command)

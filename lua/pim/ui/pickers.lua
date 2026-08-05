@@ -54,6 +54,42 @@ function M.model()
 	end)
 end
 
+function M.fork()
+	local client = require("pim.rpc.client")
+	local state = require("pim.state").get()
+	if state.is_streaming or state.is_compacting or state.bash_running or state.retrying then
+		vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
+		return
+	end
+
+	client.get_fork_messages(function(success, data)
+		if not success then
+			vim.notify("[pim] Cannot list fork prompts: " .. tostring(data), vim.log.levels.ERROR)
+			return
+		end
+		if type(data) ~= "table" or type(data.messages) ~= "table" then
+			vim.notify("[pim] pi did not return fork prompts", vim.log.levels.WARN)
+			return
+		end
+		if #data.messages == 0 then
+			vim.notify("[pim] No prompts are available for forking", vim.log.levels.WARN)
+			return
+		end
+
+		vim.ui.select(data.messages, {
+			prompt = "pi fork from prompt",
+			format_item = function(message)
+				local text = (message.text or ""):gsub("%s+", " ")
+				return text
+			end,
+		}, function(choice)
+			if choice then
+				require("pim").fork(choice.entryId)
+			end
+		end)
+	end)
+end
+
 function M.session()
 	local sessions = require("pim.sessions").list()
 	if #sessions == 0 then
