@@ -50,7 +50,7 @@ return {
 		h.ok(type(results.messages.messages) == "table", "messages list present")
 	end,
 
-	["fork and clone requests round-trip through pi"] = function()
+	["fork, clone, and tree requests round-trip through pi"] = function()
 		start_fake()
 		local result = {}
 
@@ -63,10 +63,13 @@ return {
 		client.clone(function(success, data)
 			result.clone = { success = success, data = data }
 		end)
+		client.get_tree(function(success, data)
+			result.tree = { success = success, data = data }
+		end)
 
 		wait_for(function()
-			return result.messages ~= nil and result.fork ~= nil and result.clone ~= nil
-		end, "fork and clone responses")
+			return result.messages ~= nil and result.fork ~= nil and result.clone ~= nil and result.tree ~= nil
+		end, "fork, clone, and tree responses")
 
 		h.eq(true, result.messages.success)
 		h.eq("Fix the parser error", result.messages.data.messages[2].text)
@@ -74,6 +77,8 @@ return {
 		h.eq("Fix the parser error", result.fork.data.text)
 		h.eq(true, result.clone.success)
 		h.eq(false, result.clone.data.cancelled)
+		h.eq(true, result.tree.success)
+		h.eq("tree-5", result.tree.data.leafId)
 	end,
 
 	["unknown command surfaces the error payload"] = function()

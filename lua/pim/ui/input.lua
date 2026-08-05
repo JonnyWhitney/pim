@@ -6,6 +6,7 @@ local history = {}
 local nav_index = nil
 local draft = nil
 local attached = {}
+local locked = false
 
 local function get_text(buf)
 	return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
@@ -13,7 +14,14 @@ end
 
 local function set_text(buf, text)
 	local lines = vim.split(text, "\n", { plain = true })
+	local restore_lock = not vim.bo[buf].modifiable
+	if restore_lock then
+		vim.bo[buf].modifiable = true
+	end
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	if restore_lock then
+		vim.bo[buf].modifiable = false
+	end
 	local win = layout.input_win()
 	if win then
 		vim.api.nvim_win_set_cursor(win, { #lines, math.max(#lines[#lines] - 1, 0) })
@@ -104,6 +112,10 @@ end
 
 ---@param behavior "steer"|"followUp"|nil
 function M.submit(behavior)
+	if locked then
+		vim.notify("[pim] Close the tree before sending a prompt", vim.log.levels.WARN)
+		return
+	end
 	local buf = layout.input_buf()
 	if not buf then
 		return
@@ -131,6 +143,10 @@ function M.submit(behavior)
 end
 
 function M.send(text)
+	if locked then
+		vim.notify("[pim] Close the tree before sending a prompt", vim.log.levels.WARN)
+		return
+	end
 	text = vim.trim(text or "")
 	if text == "" then
 		M.submit()
@@ -148,9 +164,23 @@ function M.replace(text)
 	end
 end
 
+---@param value boolean
+function M.set_locked(value)
+	locked = value
+	local buf = layout.input_buf()
+	if buf then
+		vim.bo[buf].modifiable = not locked
+	end
+end
+
+function M.is_locked()
+	return locked
+end
+
 function M.reset()
 	history = {}
 	nav_index, draft = nil, nil
+	M.set_locked(false)
 end
 
 function M.setup()
@@ -159,6 +189,7 @@ function M.setup()
 		return
 	end
 	local keymaps = require("pim.config").get().keymaps
+	vim.bo[buf].modifiable = not locked
 
 	vim.keymap.set("n", keymaps.submit, function()
 		M.submit()

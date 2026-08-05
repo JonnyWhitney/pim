@@ -53,6 +53,53 @@ local function messages_for_session()
 	return {}
 end
 
+local session_tree = {
+	{
+		entry = { type = "message", id = "tree-1", parentId = nil, message = user("Start the parser") },
+		children = {
+			{
+				entry = {
+					type = "message",
+					id = "tree-2",
+					parentId = "tree-1",
+					message = assistant("I will inspect it."),
+				},
+				children = {
+					{
+						entry = {
+							type = "message",
+							id = "tree-3",
+							parentId = "tree-2",
+							message = user("Fix the parser error"),
+						},
+						label = "parser work",
+						children = {
+							{
+								entry = {
+									type = "message",
+									id = "tree-4",
+									parentId = "tree-3",
+									message = assistant("I fixed the lexer."),
+								},
+								children = {},
+							},
+							{
+								entry = {
+									type = "message",
+									id = "tree-5",
+									parentId = "tree-3",
+									message = assistant("I fixed the parser."),
+								},
+								children = {},
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+
 local function run_tool_turn(cmd)
 	local call = { type = "toolCall", id = "call-1", name = "bash", arguments = { command = "ls" } }
 	send({ type = "response", id = cmd.id, command = "prompt", success = true })
@@ -214,6 +261,14 @@ local function handle(cmd)
 			command = "get_messages",
 			success = true,
 			data = { messages = messages_for_session() },
+		})
+	elseif cmd.type == "get_tree" then
+		send({
+			type = "response",
+			id = cmd.id,
+			command = "get_tree",
+			success = true,
+			data = { tree = session_tree, leafId = "tree-5" },
 		})
 	elseif cmd.type == "get_fork_messages" then
 		send({

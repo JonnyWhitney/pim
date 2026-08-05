@@ -59,6 +59,10 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     Select a session for the current working directory. pim loads the
     selected session history into the transcript.
 
+:PiTree                                                                *:PiTree*
+    Browse the active session tree. Use j and k to move. Press <CR> or q to
+    close the tree. pim disables prompts while the tree is open.
+
 :PiNewSession                                                  *:PiNewSession*
     Start a new session. The transcript clears. pi continues to run.
 

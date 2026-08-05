@@ -58,6 +58,7 @@ local function connect(extra_args)
 		on_ui_request = require("pim.ui.dialogs").handle,
 		on_exit = function(code, intentional, stderr_tail)
 			require("pim.ui.dialogs").reset()
+			require("pim.ui.tree").reset()
 			transcript.divider(("*pi exited (code %d%s)*"):format(code, intentional and ", requested" or ""))
 			---@type integer|PimStateNone
 			local exit_code = state.NONE

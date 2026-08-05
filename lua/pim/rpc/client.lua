@@ -269,6 +269,10 @@ function M.get_fork_messages(callback)
 	M.request("get_fork_messages", nil, callback)
 end
 
+function M.get_tree(callback)
+	M.request("get_tree", nil, callback)
+end
+
 ---@param entry_id string
 function M.fork(entry_id, callback)
 	M.request("fork", { entryId = entry_id }, callback)
