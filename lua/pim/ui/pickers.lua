@@ -7,12 +7,92 @@ local function mark(is_current)
 	return is_current and "● " or "  "
 end
 
+local function format_trust_decision(project, entry)
+	if not entry then
+		return "none"
+	end
+	local decision = entry.decision and "trusted" or "untrusted"
+	if entry.path ~= project then
+		return ("%s (inherited from %s)"):format(decision, entry.path)
+	end
+	return ("%s (%s)"):format(decision, entry.path)
+end
+
+local function trust_options(project)
+	local trust = require("pim.trust")
+	local options = {
+		{
+			label = "Trust",
+			decision = true,
+			saved_path = project,
+			apply = function()
+				trust.trust(project)
+			end,
+		},
+	}
+	local parent = trust.parent_path(project)
+	if parent then
+		options[#options + 1] = {
+			label = ("Trust parent folder (%s)"):format(parent),
+			decision = true,
+			saved_path = parent,
+			apply = function()
+				trust.trust_parent(project)
+			end,
+		}
+	end
+	options[#options + 1] = {
+		label = "Do not trust",
+		decision = false,
+		saved_path = project,
+		apply = function()
+			trust.reject(project)
+		end,
+	}
+	return options
+end
+
 local function format_model(model, is_current)
 	local ctx = ""
 	if model.contextWindow then
 		ctx = (" — %dk ctx"):format(math.floor(model.contextWindow / 1000))
 	end
 	return ("%s%s (%s)%s"):format(mark(is_current), model.name or model.id, model.provider, ctx)
+end
+
+function M.trust()
+	local trust = require("pim.trust")
+	local ok, project, entry = pcall(function()
+		local path = trust.canonical_path()
+		return path, trust.get_entry(path)
+	end)
+	if not ok then
+		vim.notify("[pim] Cannot read project trust: " .. tostring(project), vim.log.levels.ERROR)
+		return
+	end
+
+	local options = trust_options(project)
+	vim.ui.select(options, {
+		prompt = ("pi trust — %s — saved: %s"):format(project, format_trust_decision(project, entry)),
+		format_item = function(option)
+			local is_saved = entry ~= nil and entry.path == option.saved_path and entry.decision == option.decision
+			return mark(is_saved) .. option.label
+		end,
+	}, function(choice)
+		if not choice then
+			return
+		end
+		local applied, apply_error = pcall(choice.apply)
+		if not applied then
+			vim.notify("[pim] Cannot update project trust: " .. tostring(apply_error), vim.log.levels.ERROR)
+			return
+		end
+		if require("pim.rpc.client").is_running() then
+			vim.notify("[pim] Project trust saved. Run :PiRestart to load it.")
+		else
+			vim.notify("[pim] Project trust saved.")
+		end
+	end)
 end
 
 function M.model()

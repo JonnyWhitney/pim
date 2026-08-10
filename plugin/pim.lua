@@ -35,6 +35,10 @@ vim.api.nvim_create_user_command("PiTree", function()
 	require("pim.ui.tree").open()
 end, { desc = "Browse the current pi session tree" })
 
+vim.api.nvim_create_user_command("PiTrust", function()
+	require("pim.ui.pickers").trust()
+end, { desc = "Manage trust for the current project" })
+
 vim.api.nvim_create_user_command("PiNewSession", function()
 	require("pim").new_session()
 end, { desc = "Start a new pi session" })
