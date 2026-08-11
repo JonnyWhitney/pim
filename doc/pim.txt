@@ -67,6 +67,33 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     preview to the tree. r forks a selected user prompt. c clones the active
     branch. In the tree, <CR> or q restores the active transcript.
 
+:PiTrust                                                            *:PiTrust*
+    Manage project trust for Neovim's current working directory. This command
+    works when pi is running or stopped.
+
+    pim resolves symlinks and shows the saved decision. The closest decision
+    from an ancestor directory applies when the current directory has no
+    direct decision. The picker shows this decision as inherited.
+
+    The picker has three choices:
+
+    Trust
+        Save trust for the current directory.
+
+    Trust parent folder
+        Save trust for the immediate parent directory. Remove a direct
+        decision for the current directory.
+
+    Do not trust
+        Save a rejection for the current directory.
+
+    pim reads and writes $PI_CODING_AGENT_DIR/trust.json. It uses
+    ~/.pi/agent/trust.json when the environment variable is not set. pim does
+    not overwrite malformed or invalid trust data.
+
+    A running pi process does not reload a saved trust decision. Run
+    |:PiRestart| after you change trust while pi is running.
+
 :PiNewSession                                                  *:PiNewSession*
     Start a new session. The transcript clears. pi continues to run.
 

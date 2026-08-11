@@ -18,7 +18,18 @@ For lazy.nvim:
 ```lua
 {
   "JonnyWhitney/pim",
-  cmd = { "PiStart", "PiToggle", "PiResume", "PiTree", "PiFork", "PiClone", "PiModel", "PiThinking", "PiLog" },
+  cmd = {
+    "PiStart",
+    "PiToggle",
+    "PiResume",
+    "PiTree",
+    "PiTrust",
+    "PiFork",
+    "PiClone",
+    "PiModel",
+    "PiThinking",
+    "PiLog",
+  },
   -- opts = { ... }, -- See Configuration. setup() is optional.
 }
 ```
@@ -54,6 +65,7 @@ session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 | `:PiAbort` | Stop the current agent run. |
 | `:PiResume` | Select a session for the current directory. |
 | `:PiTree` | Browse the active session tree. Prompts are disabled while it is open. |
+| `:PiTrust` | Manage project trust for the current working directory. |
 | `:PiNewSession` | Start a new session. |
 | `:PiFork` | Fork from an earlier prompt and edit that prompt in a new session. |
 | `:PiClone` | Copy the active branch into a new session. |
@@ -69,6 +81,24 @@ session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
 fork a selected user prompt, and `c` to clone the active branch. In a preview,
 `q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
+
+### Project trust
+
+`:PiTrust` works when pi is running or stopped. It manages trust for Neovim's
+current working directory. The picker resolves symlinks and shows the saved
+decision. A decision from an ancestor directory is shown as inherited.
+
+The picker has these choices:
+
+- **Trust** saves trust for the current directory.
+- **Trust parent folder** saves trust for its immediate parent and removes a
+  direct decision for the current directory.
+- **Do not trust** saves a rejection for the current directory.
+
+pim reads and writes `$PI_CODING_AGENT_DIR/trust.json`. It uses
+`~/.pi/agent/trust.json` when the environment variable is not set. It refuses
+to overwrite invalid trust data. If pi is running, use `:PiRestart` after you
+save a decision. The running process does not reload trust data.
 
 ## Keymaps
 
