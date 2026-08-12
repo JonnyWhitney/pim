@@ -74,15 +74,45 @@ return {
 		h.eq(42, state.get().context_percent, "NONE clears only the key it is assigned to")
 	end,
 
-	["poll_stats clears a stale context percent when contextUsage is absent"] = function()
+	["poll_stats stores current context usage"] = function()
+		connect_fake_pi()
+
+		state.poll_stats()
+
+		h.wait_until(function()
+			return state.get().context_tokens == 12000
+		end, "poll_stats to store context usage", 5000)
+		local current = state.get()
+		h.eq(100000, current.context_window)
+		h.eq(12, current.context_percent)
+	end,
+
+	["poll_stats clears stale context usage when contextUsage is absent"] = function()
 		connect_fake_pi("nocontext")
-		state.update({ context_percent = 42 })
+		state.update({ context_tokens = 42000, context_window = 100000, context_percent = 42 })
 
 		state.poll_stats()
 
 		h.wait_until(function()
 			return state.get().context_percent == nil
-		end, "poll_stats to clear the stale context percent", 5000)
+		end, "poll_stats to clear stale context usage", 5000)
+		local current = state.get()
+		h.eq(nil, current.context_tokens)
+		h.eq(nil, current.context_window)
+	end,
+
+	["poll_stats clears all context usage when the current count is null"] = function()
+		connect_fake_pi("nullcontext")
+		state.update({ context_tokens = 42000, context_window = 100000, context_percent = 42 })
+
+		state.poll_stats()
+
+		h.wait_until(function()
+			return state.get().context_percent == nil
+		end, "poll_stats to clear null context usage", 5000)
+		local current = state.get()
+		h.eq(nil, current.context_tokens)
+		h.eq(nil, current.context_window)
 	end,
 
 	["observers fire on every update"] = function()
@@ -148,13 +178,15 @@ return {
 			model = { id = "m1", name = "Model One", provider = "prov" },
 			thinking_level = "medium",
 			config_dir = "~/.pi-personal/agent",
-			context_percent = 42,
+			context_tokens = 12000,
+			context_window = 100000,
+			context_percent = 12,
 			session_name = "refactor",
 			ext_status = { gate = "guard: on" },
 			ext_widgets = { widget = { "widget: ready" } },
 		})
 		h.eq(
-			" pi │ Provider: prov │ Model: Model One │ Thinking: medium │ Config: ~/.pi-personal/agent │ ctx:42%% │ refactor │ guard: on │ widget: ready",
+			" pi │ Provider: prov │ Model: Model One │ Thinking: medium │ Config: ~/.pi-personal/agent │ ctx:12k/100k (12%%) │ refactor │ guard: on │ widget: ready",
 			bar
 		)
 	end,

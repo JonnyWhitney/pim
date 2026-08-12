@@ -55,6 +55,9 @@ function M.handle(event)
 			transcript.set(current_key, "message", render.message(event.message, render_opts()), { final = true })
 			current_key = nil
 		end
+		if event.message and event.message.role == "assistant" then
+			state.poll_stats()
+		end
 	elseif kind == "tool_execution_start" then
 		transcript.set(
 			"tool-" .. event.toolCallId,

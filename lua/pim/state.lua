@@ -19,6 +19,8 @@ local function initial()
 		session_id = nil,
 		session_name = nil,
 		session_file = nil,
+		context_tokens = nil,
+		context_window = nil,
 		context_percent = nil,
 		retrying = false,
 		ext_status = {},
@@ -127,8 +129,14 @@ function M.poll_stats()
 			return
 		end
 		local usage = stats.contextUsage
+		local has_context = type(usage) == "table"
+			and type(usage.tokens) == "number"
+			and type(usage.contextWindow) == "number"
+			and type(usage.percent) == "number"
 		M.update({
-			context_percent = usage and usage.percent or M.NONE,
+			context_tokens = has_context and usage.tokens or M.NONE,
+			context_window = has_context and usage.contextWindow or M.NONE,
+			context_percent = has_context and usage.percent or M.NONE,
 			session_file = stats.sessionFile or state.session_file,
 		})
 	end)
