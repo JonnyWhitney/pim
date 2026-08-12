@@ -1,7 +1,5 @@
 local M = {}
 
-local MAX_HEADER_ARGS_WIDTH = 72
-
 local function split_lines(text)
 	return vim.split(text or "", "\n", { plain = true })
 end
@@ -56,16 +54,58 @@ local function content_to_text(content)
 	return table.concat(parts, "\n")
 end
 
-function M.args_summary(arguments)
-	if type(arguments) ~= "table" or vim.tbl_isempty(arguments) then
-		return ""
+local function format_json(value)
+	local encoded = vim.json.encode(value)
+	local output = {}
+	local indent = 0
+	local index = 1
+
+	local function newline()
+		output[#output + 1] = "\n" .. string.rep("  ", indent)
 	end
-	local encoded = vim.json.encode(arguments)
-	encoded = encoded:gsub("%s*\n%s*", " ")
-	if vim.fn.strchars(encoded) > MAX_HEADER_ARGS_WIDTH then
-		encoded = vim.fn.strcharpart(encoded, 0, MAX_HEADER_ARGS_WIDTH - 1) .. "…"
+
+	while index <= #encoded do
+		local char = encoded:sub(index, index)
+		if char == '"' then
+			local last = index + 1
+			while last <= #encoded do
+				local candidate = encoded:sub(last, last)
+				if candidate == "\\" then
+					last = last + 2
+				elseif candidate == '"' then
+					break
+				else
+					last = last + 1
+				end
+			end
+			output[#output + 1] = encoded:sub(index, last)
+			index = last
+		elseif char == "{" or char == "[" then
+			local closing = char == "{" and "}" or "]"
+			if encoded:sub(index + 1, index + 1) == closing then
+				output[#output + 1] = char .. closing
+				index = index + 1
+			else
+				output[#output + 1] = char
+				indent = indent + 1
+				newline()
+			end
+		elseif char == "}" or char == "]" then
+			indent = indent - 1
+			newline()
+			output[#output + 1] = char
+		elseif char == "," then
+			output[#output + 1] = char
+			newline()
+		elseif char == ":" then
+			output[#output + 1] = ": "
+		elseif not char:match("%s") then
+			output[#output + 1] = char
+		end
+		index = index + 1
 	end
-	return encoded
+
+	return table.concat(output)
 end
 
 local function render_user(message)
@@ -92,8 +132,12 @@ local function render_assistant(message, opts)
 			append_quoted(lines, block.redacted and "(redacted)" or block.thinking)
 			folds[#folds + 1] = { first = first, last = #lines - 1, kind = "thinking" }
 		elseif block.type == "toolCall" then
-			local summary = M.args_summary(block.arguments)
-			lines[#lines + 1] = ("▸ tool: %s%s"):format(block.name, summary ~= "" and (" " .. summary) or "")
+			local first = #lines
+			lines[#lines + 1] = ("▸ tool: %s"):format(block.name)
+			if type(block.arguments) == "table" and not vim.tbl_isempty(block.arguments) then
+				local _, last = append_fenced(lines, format_json(block.arguments), "json")
+				folds[#folds + 1] = { first = first, last = last, kind = "tool" }
+			end
 		elseif block.type == "text" then
 			append(lines, block.text)
 		else

@@ -55,6 +55,10 @@ windows and does not stop pi.
 The session file remains after you close the UI. `:PiStart` resumes that
 session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 
+pim stores complete tool-call arguments in the transcript as readable JSON.
+Completed tool calls and their results start folded by default. Use `<Tab>` to
+toggle a fold.
+
 ## Commands
 
 | Command | Action |
@@ -150,7 +154,7 @@ require("pim").setup({
   streaming_submit = "steer", -- Or "followUp".
   bash_passthrough = true, -- Run prompts that start with ! or !! as shell commands.
   transcript = {
-    tools_collapsed = true, -- Fold tool output after the tool ends.
+    tools_collapsed = true, -- Fold completed tool calls and results.
     show_thinking = "folded", -- "folded", "open", or "hidden".
   },
   set_title = false, -- Allow extensions to set the terminal title.
