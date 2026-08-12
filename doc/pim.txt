@@ -22,7 +22,9 @@ pim runs the pi coding agent in Neovim. pi runs as a child process in RPC
 mode. pim uses `pi --mode rpc` and JSONL over standard input and output.
 
 pim shows the conversation in a read-only Markdown transcript. Write
-prompts in the Neovim input buffer below the transcript.
+prompts in the Neovim input buffer below the transcript. pim stores complete
+tool-call arguments in the transcript as readable JSON. Completed tool calls
+and their results start folded by default. Use <Tab> to toggle a fold.
 
 pim targets Neovim nightly and requires the `pi` command. It has no plugin
 dependencies. Other Neovim releases are not supported.
@@ -190,7 +192,7 @@ Calling setup() is optional. All options have default values.
     streaming_submit = "steer", -- Or "followUp".
     bash_passthrough = true,    -- Run prompts that start with ! or !! as shell commands.
     transcript = {
-      tools_collapsed = true,   -- Fold tool output after the tool ends.
+      tools_collapsed = true,   -- Fold completed tool calls and results.
       show_thinking = "folded", -- "folded", "open", or "hidden".
     },
     set_title = false,          -- Allow extensions to set 'titlestring'.

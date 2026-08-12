@@ -49,11 +49,41 @@ return {
 		h.eq({ "### pi", "", "▸ thinking", "> (redacted)" }, block.lines)
 	end,
 
-	["assistant toolCall renders a header line with compact args"] = function()
+	["assistant toolCall renders complete long arguments in a fold"] = function()
+		local command = string.rep("x", 200)
 		local block = render.message(assistant({
-			{ type = "toolCall", id = "t1", name = "bash", arguments = { command = "ls -la" } },
+			{ type = "toolCall", id = "t1", name = "bash", arguments = { command = command } },
 		}))
-		h.eq({ "### pi", "", '▸ tool: bash {"command":"ls -la"}' }, block.lines)
+		h.eq({
+			"### pi",
+			"",
+			"▸ tool: bash",
+			"```json",
+			"{",
+			('  "command": "%s"'):format(command),
+			"}",
+			"```",
+		}, block.lines)
+		h.eq({ { first = 2, last = 7, kind = "tool" } }, block.folds)
+	end,
+
+	["assistant toolCall formats nested arguments as readable JSON"] = function()
+		local arguments = { options = { paths = { "a", "b" } } }
+		local block = render.message(assistant({
+			{ type = "toolCall", id = "t1", name = "read", arguments = arguments },
+		}))
+		local encoded = table.concat(vim.list_slice(block.lines, 5, #block.lines - 1), "\n")
+		h.eq(arguments, vim.json.decode(encoded), "rendered arguments should be valid JSON")
+		h.eq('  "options": {', block.lines[6])
+		h.eq('    "paths": [', block.lines[7])
+	end,
+
+	["assistant toolCall without arguments stays header-only"] = function()
+		local block = render.message(assistant({
+			{ type = "toolCall", id = "t1", name = "noop", arguments = {} },
+		}))
+		h.eq({ "### pi", "", "▸ tool: noop" }, block.lines)
+		h.eq({}, block.folds)
 	end,
 
 	["aborted assistant message is marked"] = function()
@@ -200,17 +230,6 @@ return {
 			},
 		})
 		h.eq({ "### You", "", "hi", "[document block]" }, block.lines)
-	end,
-
-	["args summary truncates long arguments"] = function()
-		local summary = render.args_summary({ command = string.rep("x", 200) })
-		h.ok(vim.fn.strchars(summary) <= 72, "summary should be truncated to 72 chars")
-		h.ok(summary:find("…", 1, true), "truncation marker present")
-	end,
-
-	["args summary is empty for empty arguments"] = function()
-		h.eq("", render.args_summary({}))
-		h.eq("", render.args_summary(nil))
 	end,
 
 	["empty thinking blocks are not rendered"] = function()

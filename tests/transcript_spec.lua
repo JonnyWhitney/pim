@@ -146,7 +146,7 @@ return {
 		h.eq({}, vim.api.nvim_buf_get_extmarks(buf, queue_ns, 0, -1, {}))
 	end,
 
-	["end-to-end: tool run renders call, streamed result, closed fold"] = function()
+	["end-to-end: tool run starts call and result folds closed"] = function()
 		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "tool" } })
 		require("pim").start()
 		transcript.reset()
@@ -160,8 +160,8 @@ return {
 			return lines[#lines - 1] == "---"
 		end, "the closing divider; buffer:\n" .. table.concat(buffer_lines(), "\n"), 10000)
 		local snapshot = buffer_lines()
-		local fold_start = vim.api.nvim_win_call(layout.transcript_win(), function()
-			return vim.fn.foldclosed(9)
+		local call_fold, result_fold = vim.api.nvim_win_call(layout.transcript_win(), function()
+			return vim.fn.foldclosed(7), vim.fn.foldclosed(14)
 		end)
 
 		h.eq({
@@ -171,7 +171,12 @@ return {
 			"",
 			"### pi",
 			"",
-			'▸ tool: bash {"command":"ls"}',
+			"▸ tool: bash",
+			"```json",
+			"{",
+			'  "command": "ls"',
+			"}",
+			"```",
 			"",
 			"▸ result: bash",
 			"```",
@@ -186,7 +191,8 @@ return {
 			"---",
 			"",
 		}, snapshot)
-		h.eq(9, fold_start, "tool output fold should be closed at its header")
+		h.eq(7, call_fold, "tool call fold should be closed at its header")
+		h.eq(14, result_fold, "tool result fold should be closed at its header")
 	end,
 
 	["end-to-end: fake pi run renders user echo, assistant text, divider"] = function()
