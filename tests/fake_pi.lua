@@ -1,4 +1,12 @@
-local SCENARIOS = { crash = true, tool = true, dialog = true, hostile = true, nocontext = true, retry = true }
+local SCENARIOS = {
+	crash = true,
+	tool = true,
+	dialog = true,
+	hostile = true,
+	nocontext = true,
+	nullcontext = true,
+	retry = true,
+}
 
 local scenario = "basic"
 for _, value in ipairs(arg) do
@@ -420,7 +428,9 @@ local function handle(cmd)
 		send({ type = "thinking_level_changed", level = cmd.level })
 	elseif cmd.type == "get_session_stats" then
 		local usage = nil
-		if scenario ~= "nocontext" then
+		if scenario == "nullcontext" then
+			usage = { tokens = vim.NIL, contextWindow = 100000, percent = vim.NIL }
+		elseif scenario ~= "nocontext" then
 			usage = { tokens = 12000, contextWindow = 100000, percent = 12 }
 		end
 		send({

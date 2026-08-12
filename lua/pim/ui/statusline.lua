@@ -12,6 +12,26 @@ local function esc(text)
 	return (text:gsub("%%", "%%%%"))
 end
 
+---@param tokens number
+---@return string
+local function format_tokens(tokens)
+	local divisor = 1
+	local suffix = ""
+	if tokens >= 1000000 then
+		divisor = 1000000
+		suffix = "m"
+	elseif tokens >= 1000 then
+		divisor = 1000
+		suffix = "k"
+	end
+
+	local scaled = tokens / divisor
+	if scaled == math.floor(scaled) then
+		return ("%d%s"):format(scaled, suffix)
+	end
+	return ("%.1f%s"):format(scaled, suffix)
+end
+
 ---@param state table
 ---@return string
 function M.build(state)
@@ -38,8 +58,12 @@ function M.build(state)
 		parts[#parts + 1] = "connecting…"
 	end
 
-	if state.context_percent then
-		parts[#parts + 1] = ("ctx:%d%%"):format(state.context_percent)
+	if state.context_tokens and state.context_window and state.context_percent then
+		parts[#parts + 1] = ("ctx:%s/%s (%d%%)"):format(
+			format_tokens(state.context_tokens),
+			format_tokens(state.context_window),
+			state.context_percent
+		)
 	end
 
 	if state.is_compacting then

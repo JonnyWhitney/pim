@@ -118,6 +118,27 @@ return {
 		h.eq("fake-session-id", answer.data.sessionId, "responses still correlate by id")
 	end,
 
+	["only completed assistant messages refresh context usage"] = function()
+		local state = require("pim.state")
+		local original_poll_stats = state.poll_stats
+		local polls = 0
+		state.poll_stats = function()
+			polls = polls + 1
+		end
+
+		local success, err = xpcall(function()
+			events.handle({ type = "message_end", message = { role = "user", content = "prompt" } })
+			events.handle({ type = "message_end", message = { role = "toolResult", content = {} } })
+			events.handle({ type = "message_end", message = { role = "assistant", content = {} } })
+		end, debug.traceback)
+		state.poll_stats = original_poll_stats
+		if not success then
+			error(err, 0)
+		end
+
+		h.eq(1, polls)
+	end,
+
 	["message events with no message do not raise"] = function()
 		h.eq(
 			nil,

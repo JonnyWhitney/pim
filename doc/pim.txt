@@ -27,9 +27,11 @@ prompts in the Neovim input buffer below the transcript.
 pim targets Neovim nightly and requires the `pi` command. It has no plugin
 dependencies. Other Neovim releases are not supported.
 
-The transcript winbar shows the provider, model, thinking level, and pi
-configuration directory. pim uses $PI_CODING_AGENT_DIR when it is set. It
-uses ~/.pi/agent when that variable is unset.
+The transcript winbar shows the provider, model, thinking level, pi
+configuration directory, and context usage. Context usage has the form
+`ctx:12k/100k (12%)` and refreshes after each completed assistant response.
+pim uses $PI_CODING_AGENT_DIR when it is set. It uses ~/.pi/agent when that
+variable is unset.
 
 Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 >sh
