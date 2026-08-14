@@ -45,7 +45,12 @@ return {
 
 		local failure = handle_all({
 			{ type = "tool_execution_start", toolName = "bash" },
-			{ type = "tool_execution_start", toolCallId = "call-1", toolName = "bash" },
+			{
+				type = "tool_execution_start",
+				toolCallId = "call-1",
+				toolName = "bash",
+				args = { command = "mise test" },
+			},
 			{
 				type = "tool_execution_end",
 				toolCallId = "call-1",
@@ -57,8 +62,37 @@ return {
 
 		h.eq(nil, failure)
 		local rendered = table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
-		h.ok(rendered:find("result: bash", 1, true), "the good block rendered, got: " .. rendered)
+		h.ok(rendered:find("result(bash): mise test", 1, true), "the cached arguments rendered, got: " .. rendered)
 		h.ok(rendered:find("the output", 1, true), "its result rendered")
+	end,
+
+	["loaded tool results recover context from earlier calls"] = function()
+		layout.open()
+		events.load_messages({
+			{
+				role = "assistant",
+				content = {
+					{
+						type = "toolCall",
+						id = "write-1",
+						name = "write",
+						arguments = { path = "notes.txt", content = "saved content" },
+					},
+				},
+			},
+			{
+				role = "toolResult",
+				toolCallId = "write-1",
+				toolName = "write",
+				content = { { type = "text", text = "written" } },
+			},
+		})
+		transcript.flush()
+
+		local rendered = table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+		h.ok(rendered:find("tool(write): notes.txt", 1, true), "the loaded call has context")
+		h.ok(rendered:find("result(write): notes.txt", 1, true), "the loaded result has context")
+		h.ok(rendered:find("saved content", 1, true), "the loaded write content is inspectable")
 	end,
 
 	["events with no type at all are ignored"] = function()

@@ -23,8 +23,13 @@ mode. pim uses `pi --mode rpc` and JSONL over standard input and output.
 
 pim shows the conversation in a read-only Markdown transcript. Write
 prompts in the Neovim input buffer below the transcript. pim stores complete
-tool-call arguments in the transcript as readable JSON. Completed tool calls
-and their results start folded by default. Use <Tab> to toggle a fold.
+tool-call arguments in the transcript as readable JSON. Fold headers show the
+file path for built-in file tools and a command summary for Bash. Edit results
+show a diff, write results show syntax-highlighted file content, and Bash
+results keep the complete command separate from its output. pim can show the
+proposed operation while a permission dialog is open. This preview is
+display-only and does not add a message to the model context. Completed tool calls and their
+results start folded by default. Use <Tab> to toggle a fold.
 
 pim targets Neovim nightly and requires the `pi` command. It has no plugin
 dependencies. Other Neovim releases are not supported.
