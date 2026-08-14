@@ -56,6 +56,11 @@ The session file remains after you close the UI. `:PiStart` resumes that
 session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
 
 pim stores complete tool-call arguments in the transcript as readable JSON.
+Fold headers show the file path for built-in file tools and a command summary
+for Bash. Edit results show a diff, write results show syntax-highlighted file
+content, and Bash results keep the complete command separate from its output.
+PIM can show the proposed operation while a permission dialog is open. This
+preview is display-only and does not add a message to the model context.
 Completed tool calls and their results start folded by default. Use `<Tab>` to
 toggle a fold.
 

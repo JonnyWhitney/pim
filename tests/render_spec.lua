@@ -57,7 +57,7 @@ return {
 		h.eq({
 			"### pi",
 			"",
-			"▸ tool: bash",
+			("▸ tool(bash): %s"):format(command),
 			"```json",
 			"{",
 			('  "command": "%s"'):format(command),
@@ -78,11 +78,38 @@ return {
 		h.eq('    "paths": [', block.lines[7])
 	end,
 
+	["built-in file tool calls show their supplied paths"] = function()
+		for _, case in ipairs({
+			{ name = "read", path = "src/read.lua" },
+			{ name = "edit", path = "/tmp/edit.lua" },
+			{ name = "write", path = "doc/write.txt" },
+		}) do
+			local block = render.message(assistant({
+				{ type = "toolCall", id = case.name, name = case.name, arguments = { path = case.path } },
+			}))
+			h.eq(("▸ tool(%s): %s"):format(case.name, case.path), block.lines[3])
+		end
+	end,
+
+	["legacy file_path is shown when path is absent"] = function()
+		local block = render.message(assistant({
+			{ type = "toolCall", id = "t1", name = "read", arguments = { file_path = "legacy.lua" } },
+		}))
+		h.eq("▸ tool(read): legacy.lua", block.lines[3])
+	end,
+
+	["multiline bash context uses the first non-empty line"] = function()
+		local block = render.message(assistant({
+			{ type = "toolCall", id = "t1", name = "bash", arguments = { command = "\n  mise test  \n\necho done" } },
+		}))
+		h.eq("▸ tool(bash): mise test … (+1 lines)", block.lines[3])
+	end,
+
 	["assistant toolCall without arguments stays header-only"] = function()
 		local block = render.message(assistant({
 			{ type = "toolCall", id = "t1", name = "noop", arguments = {} },
 		}))
-		h.eq({ "### pi", "", "▸ tool: noop" }, block.lines)
+		h.eq({ "### pi", "", "▸ tool(noop)" }, block.lines)
 		h.eq({}, block.folds)
 	end,
 
@@ -104,7 +131,7 @@ return {
 			isError = false,
 			content = { { type = "text", text = "file-a\nfile-b" } },
 		})
-		h.eq({ "▸ result: bash", "```", "file-a", "file-b", "```" }, block.lines)
+		h.eq({ "▸ result(bash)", "```", "file-a", "file-b", "```" }, block.lines)
 		h.eq({ { first = 0, last = 4, kind = "tool" } }, block.folds)
 	end,
 
@@ -115,13 +142,31 @@ return {
 			isError = true,
 			content = { { type = "text", text = "no such file" } },
 		})
-		h.eq("▸ result: read ✘ error", block.lines[1])
+		h.eq("▸ result(read) ✘ error", block.lines[1])
 	end,
 
 	["empty tool result has no fence and no fold"] = function()
 		local block = render.message({ role = "toolResult", toolName = "noop", isError = false, content = {} })
-		h.eq({ "▸ result: noop" }, block.lines)
+		h.eq({ "▸ result(noop)" }, block.lines)
 		h.eq({}, block.folds)
+	end,
+
+	["tool results reuse call context"] = function()
+		local cases = {
+			{ name = "read", arguments = { path = "src/read.lua" }, context = "src/read.lua" },
+			{ name = "edit", arguments = { path = "/tmp/edit.lua" }, context = "/tmp/edit.lua" },
+			{ name = "write", arguments = { path = "doc/write.txt" }, context = "doc/write.txt" },
+			{ name = "bash", arguments = { command = "mise test\necho done" }, context = "mise test … (+1 lines)" },
+		}
+		for _, case in ipairs(cases) do
+			local block = render.message({
+				role = "toolResult",
+				toolCallId = case.name,
+				toolName = case.name,
+				content = {},
+			}, { tool_arguments = { [case.name] = case.arguments } })
+			h.eq(("▸ result(%s): %s"):format(case.name, case.context), block.lines[1])
+		end
 	end,
 
 	["tool output containing a fence gets a longer fence"] = function()
@@ -256,30 +301,94 @@ return {
 			running = true,
 			result = { content = { { type = "text", text = "file-a" } } },
 		})
-		h.eq({ "▸ result: bash [running]", "```", "file-a", "```" }, block.lines)
+		h.eq({ "▸ result(bash) [running]", "```", "file-a", "```" }, block.lines)
 		h.eq({ { first = 0, last = 3, kind = "tool" } }, block.folds)
+	end,
+
+	["pending edit execution shows its preview"] = function()
+		local block = render.tool_execution({
+			toolName = "edit",
+			args = { path = "src/config.lua" },
+			preview = "@@ -1 +1 @@\n-old\n+new",
+			running = true,
+		})
+		h.eq("▸ result(edit): src/config.lua [running]", block.lines[1])
+		h.eq("```diff", block.lines[2])
+		h.eq("-old", block.lines[4])
+		h.eq("+new", block.lines[5])
+	end,
+
+	["finished edit execution uses the authoritative result diff"] = function()
+		local block = render.tool_execution({
+			toolName = "edit",
+			args = { path = "src/config.lua" },
+			preview = "preview",
+			result = { content = { { type = "text", text = "done" } }, details = { diff = "-before\n+after" } },
+		})
+		h.eq({ "▸ result(edit): src/config.lua", "```diff", "-before", "+after", "```" }, block.lines)
+	end,
+
+	["write execution uses the target filetype for proposed content"] = function()
+		local block = render.tool_execution({
+			toolName = "write",
+			args = { path = "new.lua", content = "local first = true\nreturn first" },
+			result = { content = { { type = "text", text = "written" } } },
+		})
+		h.eq({
+			"▸ result(write): new.lua",
+			"```lua",
+			"local first = true",
+			"return first",
+			"```",
+		}, block.lines)
+	end,
+
+	["pending bash execution shows the complete command"] = function()
+		local block = render.tool_execution({
+			toolName = "bash",
+			args = { command = "mise test\necho done" },
+			preview = "mise test\necho done",
+			running = true,
+		})
+		h.eq({
+			"▸ result(bash): mise test … (+1 lines) [running]",
+			"```bash",
+			"mise test",
+			"echo done",
+			"```",
+		}, block.lines)
+	end,
+
+	["finished bash execution keeps the command and output separate"] = function()
+		local block = render.tool_execution({
+			toolName = "bash",
+			args = { command = "echo done" },
+			preview = "echo done",
+			result = { content = { { type = "text", text = "done" } } },
+		})
+		h.eq({ "▸ result(bash): echo done", "```bash", "echo done", "```", "```", "done", "```" }, block.lines)
 	end,
 
 	["finished tool execution drops the running marker"] = function()
 		local block = render.tool_execution({ toolName = "bash", result = "done" })
-		h.eq("▸ result: bash", block.lines[1])
+		h.eq("▸ result(bash)", block.lines[1])
 	end,
 
 	["failed tool execution is marked"] = function()
 		local block = render.tool_execution({ toolName = "bash", isError = true, result = "boom" })
-		h.eq("▸ result: bash ✘ error", block.lines[1])
+		h.eq("▸ result(bash) ✘ error", block.lines[1])
 	end,
 
 	["tool execution with no output has no fence"] = function()
 		local block = render.tool_execution({ toolName = "noop", running = true })
-		h.eq({ "▸ result: noop [running]" }, block.lines)
+		h.eq({ "▸ result(noop) [running]" }, block.lines)
 		h.eq({}, block.folds)
 	end,
 
 	["tool execution tolerates ad-hoc result shapes"] = function()
-		h.eq({ "▸ result: t", "```", "raw", "```" }, render.tool_execution({ toolName = "t", result = "raw" }).lines)
+		h.eq({ "▸ result(t)", "```", "raw", "```" }, render.tool_execution({ toolName = "t", result = "raw" }).lines)
 		h.eq(
-			{ "▸ result: t", "```", "out", "```" },
+			{ "▸ result(t)", "```", "out", "```" },
 			render.tool_execution({ toolName = "t", result = { output = "out" } }).lines
 		)
 	end,
