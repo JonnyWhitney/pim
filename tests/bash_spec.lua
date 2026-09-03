@@ -13,11 +13,11 @@ local function start_fake()
 end
 
 local function transcript_text()
-	return table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+	return table.concat(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "\n")
 end
 
 local function submit(text)
-	vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, vim.split(text, "\n", { plain = true }))
+	vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, vim.split(text, "\n", { plain = true }))
 	require("pim.ui.input").submit()
 end
 

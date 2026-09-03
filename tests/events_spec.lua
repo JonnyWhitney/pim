@@ -19,7 +19,7 @@ end
 
 local function count_dividers()
 	local count = 0
-	for _, line in ipairs(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false)) do
+	for _, line in ipairs(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)) do
 		if line == "---" then
 			count = count + 1
 		end
@@ -61,7 +61,7 @@ return {
 		transcript.flush()
 
 		h.eq(nil, failure)
-		local rendered = table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+		local rendered = table.concat(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "\n")
 		h.ok(rendered:find("result(bash): mise test", 1, true), "the cached arguments rendered, got: " .. rendered)
 		h.ok(rendered:find("the output", 1, true), "its result rendered")
 	end,
@@ -89,7 +89,7 @@ return {
 		})
 		transcript.flush()
 
-		local rendered = table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+		local rendered = table.concat(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "\n")
 		h.ok(rendered:find("tool(write): notes.txt", 1, true), "the loaded call has context")
 		h.ok(rendered:find("result(write): notes.txt", 1, true), "the loaded result has context")
 		h.ok(rendered:find("saved content", 1, true), "the loaded write content is inspectable")
@@ -129,11 +129,11 @@ return {
 		transcript.reset()
 		events.reset()
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "go" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "go" })
 		require("pim.ui.input").submit()
 
 		local function rendered()
-			return table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+			return table.concat(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "\n")
 		end
 		h.wait_until(function()
 			return rendered():find("survived", 1, true) ~= nil
@@ -156,6 +156,7 @@ return {
 		local state = require("pim.state")
 		local original_poll_stats = state.poll_stats
 		local polls = 0
+		---@diagnostic disable-next-line: duplicate-set-field
 		state.poll_stats = function()
 			polls = polls + 1
 		end

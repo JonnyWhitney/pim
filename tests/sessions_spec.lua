@@ -36,9 +36,7 @@ return {
 	end,
 
 	["named session parses header, name, count, and preview"] = function()
-		local info = sessions.parse_lines(read_lines(fixtures .. "/session_named.jsonl"))
-		h.ok(info, "fixture must parse")
-		---@cast info
+		local info = assert(sessions.parse_lines(read_lines(fixtures .. "/session_named.jsonl")), "fixture must parse")
 		h.eq("aaaa-1111", info.id)
 		h.eq("/tmp/proj", info.cwd)
 		h.eq("parser work", info.name)
@@ -47,13 +45,13 @@ return {
 	end,
 
 	["unnamed session falls back to a truncated one-line preview"] = function()
-		local info = sessions.parse_lines(read_lines(fixtures .. "/session_unnamed.jsonl"))
-		h.ok(info, "fixture must parse")
-		---@cast info
+		local info =
+			assert(sessions.parse_lines(read_lines(fixtures .. "/session_unnamed.jsonl")), "fixture must parse")
 		h.eq(nil, info.name)
 		h.eq(1, info.message_count)
-		h.ok(info.preview:find("hello there second line", 1, true) == 1, "newlines collapsed")
-		h.ok(info.preview:find("…", 1, true), "long preview truncated")
+		local preview = assert(info.preview, "fixture must have a preview")
+		h.ok(preview:find("hello there second line", 1, true) == 1, "newlines collapsed")
+		h.ok(preview:find("…", 1, true), "long preview truncated")
 	end,
 
 	["non-session files are rejected"] = function()
@@ -98,7 +96,7 @@ return {
 		require("pim.ui.pickers").session()
 
 		local ok, err = pcall(h.wait_until, function()
-			local lines = vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false)
+			local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
 			return table.concat(lines, "\n"):find("old answer", 1, true) ~= nil
 		end, "the switched session history to cold-render into the transcript", 10000)
 

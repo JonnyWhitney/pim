@@ -15,7 +15,7 @@ local function start_pim()
 end
 
 local function input_text()
-	return table.concat(vim.api.nvim_buf_get_lines(layout.input_buf(), 0, -1, false), "\n")
+	return table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
 end
 
 local function with_select(stub, fn)
@@ -31,7 +31,7 @@ end
 return {
 	["fork picker creates a session and replaces the input draft"] = function()
 		start_pim()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "discard this draft" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "discard this draft" })
 
 		local seen
 		with_select(function(items, opts, on_choice)
@@ -51,7 +51,7 @@ return {
 
 	["clone creates a session and clears the input draft"] = function()
 		start_pim()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "discard this draft" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "discard this draft" })
 
 		require("pim").clone()
 		h.wait_until(function()
@@ -64,9 +64,11 @@ return {
 
 		local calls = { fork_messages = 0, clone = 0 }
 		local real_messages, real_clone = client.get_fork_messages, client.clone
+		---@diagnostic disable-next-line: duplicate-set-field
 		client.get_fork_messages = function()
 			calls.fork_messages = calls.fork_messages + 1
 		end
+		---@diagnostic disable-next-line: duplicate-set-field
 		client.clone = function()
 			calls.clone = calls.clone + 1
 		end

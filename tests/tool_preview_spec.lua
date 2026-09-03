@@ -18,10 +18,13 @@ end
 return {
 	["edit preview renders a unified diff without changing the file"] = function()
 		with_file("before\nkeep\n", function(path)
-			local diff = preview.generate("edit", {
-				path = path,
-				edits = { { oldText = "before", newText = "after" } },
-			})
+			local diff = assert(
+				preview.generate("edit", {
+					path = path,
+					edits = { { oldText = "before", newText = "after" } },
+				}),
+				"edit preview must generate a diff"
+			)
 			h.ok(diff:find("-before", 1, true))
 			h.ok(diff:find("+after", 1, true))
 			h.eq({ "before", "keep" }, vim.fn.readfile(path))
@@ -30,13 +33,16 @@ return {
 
 	["edit preview applies disjoint replacements against the original file"] = function()
 		with_file("one\nmiddle\ntwo\n", function(path)
-			local diff = preview.generate("edit", {
-				path = path,
-				edits = {
-					{ oldText = "one", newText = "first" },
-					{ oldText = "two", newText = "second" },
-				},
-			})
+			local diff = assert(
+				preview.generate("edit", {
+					path = path,
+					edits = {
+						{ oldText = "one", newText = "first" },
+						{ oldText = "two", newText = "second" },
+					},
+				}),
+				"edit preview must generate a diff"
+			)
 			h.ok(diff:find("-one", 1, true))
 			h.ok(diff:find("+first", 1, true))
 			h.ok(diff:find("-two", 1, true))

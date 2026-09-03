@@ -66,7 +66,9 @@ return {
 		end, function()
 			pickers.model()
 			h.wait_until(function()
-				return seen ~= nil and state.get().model ~= nil and state.get().model.id == "other-model"
+				---@type { id: string }|nil
+				local model = state.get().model
+				return seen ~= nil and model ~= nil and model.id == "other-model"
 			end, "the model to update to the picked one", 5000)
 		end)
 
@@ -93,7 +95,9 @@ return {
 			end, "the model picker to be shown", 5000)
 		end)
 
-		h.eq("fake-model", state.get().model.id)
+		---@type { id: string }
+		local model = assert(state.get().model)
+		h.eq("fake-model", model.id)
 	end,
 
 	["a model list payload that is not a table notifies instead of raising"] = function()
@@ -190,7 +194,7 @@ return {
 					end, pickers.trust)
 				end)
 
-				local entry = trust.get_entry(project)
+				local entry = assert(trust.get_entry(project), "selected trust entry must exist")
 				h.eq(case.decision, entry.decision)
 				h.eq(trust.canonical_path(case.inherited and parent or project), entry.path)
 			end)

@@ -10,7 +10,7 @@ local function fresh()
 end
 
 local function buffer_lines()
-	return vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false)
+	return vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
 end
 
 local function block(lines)
@@ -78,11 +78,11 @@ return {
 		fresh()
 		transcript.set("a", "message", block({ "A1", "A2" }), { final = true })
 
-		local wiped = layout.transcript_buf()
+		local wiped = assert(layout.transcript_buf())
 		vim.api.nvim_buf_delete(wiped, { force = true })
 		layout.close()
 		layout.open()
-		h.ok(layout.transcript_buf() ~= wiped, "layout built a replacement buffer")
+		h.ok(assert(layout.transcript_buf()) ~= wiped, "layout built a replacement buffer")
 
 		local appended, append_error = pcall(transcript.set, "b", "message", block({ "B1" }), { final = true })
 		h.ok(appended, "appending after a wipe did not raise: " .. tostring(append_error))
@@ -111,7 +111,7 @@ return {
 		fresh()
 		transcript.set("a", "message", block({ "A" }), { final = true })
 		h.fails(function()
-			vim.api.nvim_buf_set_lines(layout.transcript_buf(), 0, -1, false, { "vandalism" })
+			vim.api.nvim_buf_set_lines(assert(layout.transcript_buf()), 0, -1, false, { "vandalism" })
 		end, "not.*modifiable")
 	end,
 
@@ -122,7 +122,7 @@ return {
 			folds = { { first = 2, last = 4, kind = "thinking" } },
 		}, { final = true })
 
-		local win = layout.transcript_win()
+		local win = assert(layout.transcript_win())
 		local closed = vim.api.nvim_win_call(win, function()
 			return vim.fn.foldclosed(3)
 		end)
@@ -134,11 +134,11 @@ return {
 		transcript.set("a", "message", block({ "A" }), { final = true })
 		transcript.set_queue({ "fix the tests" }, { "then lint" })
 
-		local buf = layout.transcript_buf()
+		local buf = assert(layout.transcript_buf())
 		local queue_ns = vim.api.nvim_get_namespaces()["pim-queue"]
 		local marks = vim.api.nvim_buf_get_extmarks(buf, queue_ns, 0, -1, { details = true })
 		h.eq(1, #marks)
-		local virt = marks[1][4].virt_lines
+		local virt = assert(marks[1][4].virt_lines, "queue extmark must have virtual lines")
 		h.eq("⏳ steer: fix the tests", virt[1][1][1])
 		h.eq("⏳ follow-up: then lint", virt[2][1][1])
 
@@ -152,7 +152,7 @@ return {
 		transcript.reset()
 		require("pim.events").reset()
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "run ls" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "run ls" })
 		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR><CR>", true, false, true), "x", false)
 
 		h.wait_until(function()
@@ -160,7 +160,7 @@ return {
 			return lines[#lines - 1] == "---"
 		end, "the closing divider; buffer:\n" .. table.concat(buffer_lines(), "\n"), 10000)
 		local snapshot = buffer_lines()
-		local call_fold, result_fold = vim.api.nvim_win_call(layout.transcript_win(), function()
+		local call_fold, result_fold = vim.api.nvim_win_call(assert(layout.transcript_win()), function()
 			return vim.fn.foldclosed(7), vim.fn.foldclosed(14)
 		end)
 
@@ -204,7 +204,7 @@ return {
 		transcript.reset()
 		require("pim.events").reset()
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "hello fake pi" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "hello fake pi" })
 		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR><CR>", true, false, true), "x", false)
 
 		h.wait_until(function()
@@ -233,7 +233,7 @@ return {
 		transcript.reset()
 		require("pim.events").reset()
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "hello fake pi" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "hello fake pi" })
 		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR><CR>", true, false, true), "x", false)
 
 		h.wait_until(function()
