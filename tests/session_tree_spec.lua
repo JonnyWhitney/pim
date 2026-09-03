@@ -76,7 +76,7 @@ return {
 			},
 		}
 
-		local path = tree.path(data, "three")
+		local path = assert(tree.path(data, "three"), "known entry must have a path")
 		h.eq(
 			{ "one", "two", "three" },
 			vim.tbl_map(function(entry)

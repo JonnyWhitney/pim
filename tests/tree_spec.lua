@@ -21,7 +21,7 @@ local function feed(keys)
 end
 
 local function transcript_text()
-	return table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+	return table.concat(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "\n")
 end
 
 return {
@@ -34,14 +34,22 @@ return {
 		h.ok(rendered:find("# pi tree", 1, true), "tree heading renders")
 		h.ok(rendered:find("Fix the parser error [parser work]", 1, true), "labels render")
 		h.ok(rendered:find("●", 1, true), "active leaf is marked")
-		h.eq(false, vim.bo[layout.input_buf()].modifiable)
-		h.eq(layout.transcript_win(), vim.api.nvim_get_current_win(), "tree receives focus")
+		h.eq(false, vim.bo[assert(layout.input_buf())].modifiable)
+		h.eq(assert(layout.transcript_win()), vim.api.nvim_get_current_win(), "tree receives focus")
 
-		local start_line = vim.api.nvim_win_get_cursor(layout.transcript_win())[1]
+		local start_line = vim.api.nvim_win_get_cursor(assert(layout.transcript_win()))[1]
 		feed("j")
-		h.eq(start_line + 1, vim.api.nvim_win_get_cursor(layout.transcript_win())[1], "j moves to the next entry")
+		h.eq(
+			start_line + 1,
+			vim.api.nvim_win_get_cursor(assert(layout.transcript_win()))[1],
+			"j moves to the next entry"
+		)
 		feed("k")
-		h.eq(start_line, vim.api.nvim_win_get_cursor(layout.transcript_win())[1], "k moves to the previous entry")
+		h.eq(
+			start_line,
+			vim.api.nvim_win_get_cursor(assert(layout.transcript_win()))[1],
+			"k moves to the previous entry"
+		)
 	end,
 
 	["p previews the selected entry and q returns to the tree"] = function()
@@ -55,7 +63,7 @@ return {
 		end, "the preview to open", 5000)
 		h.ok(transcript_text():find("Fix the parser error", 1, true), "preview shows the selected conversation")
 		h.eq(true, tree.is_open(), "preview keeps tree mode active")
-		h.eq(false, vim.bo[layout.input_buf()].modifiable, "preview keeps the input locked")
+		h.eq(false, vim.bo[assert(layout.input_buf())].modifiable, "preview keeps the input locked")
 
 		feed("q")
 		h.wait_until(function()
@@ -73,14 +81,14 @@ return {
 		h.wait_until(function()
 			return not tree.is_open()
 				and state.get().session_id == "forked-session"
-				and table.concat(vim.api.nvim_buf_get_lines(layout.input_buf(), 0, -1, false), "\n")
+				and table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
 					== "Fix the parser error"
 		end, "the selected prompt to fork", 5000)
 	end,
 
 	["c clones the active branch"] = function()
 		start_pim()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "discard this draft" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "discard this draft" })
 		tree.open()
 		h.wait_until(tree.is_open, "the tree to open", 5000)
 
@@ -88,7 +96,7 @@ return {
 		h.wait_until(function()
 			return not tree.is_open()
 				and state.get().session_id == "cloned-session"
-				and table.concat(vim.api.nvim_buf_get_lines(layout.input_buf(), 0, -1, false), "\n") == ""
+				and table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n") == ""
 		end, "the active branch to clone", 5000)
 	end,
 
@@ -99,6 +107,7 @@ return {
 
 		local calls = 0
 		local real_clone = client.clone
+		---@diagnostic disable-next-line: duplicate-set-field
 		client.clone = function()
 			calls = calls + 1
 		end
@@ -127,6 +136,7 @@ return {
 
 		local calls = 0
 		local real_prompt = client.prompt
+		---@diagnostic disable-next-line: duplicate-set-field
 		client.prompt = function()
 			calls = calls + 1
 		end
@@ -150,7 +160,7 @@ return {
 
 		feed("q")
 		h.wait_until(function()
-			return not tree.is_open() and vim.bo[layout.input_buf()].modifiable
+			return not tree.is_open() and vim.bo[assert(layout.input_buf())].modifiable
 		end, "the tree to close", 5000)
 	end,
 
@@ -161,7 +171,7 @@ return {
 
 		feed("<CR>")
 		h.wait_until(function()
-			return not tree.is_open() and vim.bo[layout.input_buf()].modifiable
+			return not tree.is_open() and vim.bo[assert(layout.input_buf())].modifiable
 		end, "enter to close the tree", 5000)
 	end,
 
@@ -169,6 +179,7 @@ return {
 		state.update({ is_streaming = true })
 		local calls = 0
 		local real_get_tree = client.get_tree
+		---@diagnostic disable-next-line: duplicate-set-field
 		client.get_tree = function()
 			calls = calls + 1
 		end

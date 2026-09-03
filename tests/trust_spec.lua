@@ -58,7 +58,7 @@ return {
 			assert(vim.uv.fs_symlink(target, link))
 
 			trust.trust(link)
-			local entry = trust.get_entry(target)
+			local entry = assert(trust.get_entry(target), "trusted entry must exist")
 			h.eq(trust.canonical_path(target), entry.path)
 			h.eq(true, entry.decision)
 			h.ok(read(directory .. "/trust.json"):find(trust.canonical_path(target), 1, true))

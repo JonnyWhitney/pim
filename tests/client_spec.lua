@@ -197,7 +197,9 @@ return {
 
 	["a request pi never answers is rejected once its deadline passes"] = function()
 		start_fake(nil, { request_timeout_ms = 120 })
-		local result, calls = nil, 0
+		---@type { success: boolean, payload: any }|nil
+		local result
+		local calls = 0
 		client.request("never_reply", nil, function(success, payload)
 			calls = calls + 1
 			result = { success = success, payload = payload }
@@ -207,6 +209,7 @@ return {
 			return result ~= nil
 		end, "the request deadline")
 
+		result = assert(result)
 		h.eq(false, result.success)
 		h.eq("pi did not respond", result.payload)
 		h.eq(true, client.is_running(), "only the request is abandoned; pi is left alone")

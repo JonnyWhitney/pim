@@ -9,8 +9,8 @@ local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h"
 local function fresh(opts)
 	config.setup(opts)
 	layout.open()
-	vim.api.nvim_set_current_win(layout.input_win())
-	vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, {})
+	vim.api.nvim_set_current_win(assert(layout.input_win()))
+	vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, {})
 	input.setup()
 end
 
@@ -20,7 +20,7 @@ local function with_fake_pi()
 end
 
 local function input_text()
-	return table.concat(vim.api.nvim_buf_get_lines(layout.input_buf(), 0, -1, false), "\n")
+	return table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
 end
 
 local function feed(keys)
@@ -42,27 +42,27 @@ end
 return {
 	["input window grows and shrinks with content, clamped"] = function()
 		fresh()
-		local win = layout.input_win()
+		local win = assert(layout.input_win())
 		local lines = {}
 		for i = 1, 6 do
 			lines[i] = "line " .. i
 		end
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, lines)
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, lines)
 		wait_height(win, 6, "grow to content")
 
 		for i = 1, 40 do
 			lines[i] = "line " .. i
 		end
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, lines)
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, lines)
 		wait_height(win, config.get().input.max_height, "clamp to max_height")
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, {})
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, {})
 		wait_height(win, config.get().input.min_height, "shrink to min_height")
 	end,
 
 	["submit without pi restores the text"] = function()
 		fresh()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "precious draft" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "precious draft" })
 		input.submit()
 		wait_text("precious draft", "restore on reject")
 	end,
@@ -84,11 +84,11 @@ return {
 		end
 
 		local ok, err = pcall(function()
-			vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "original prompt" })
+			vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "original prompt" })
 			input.submit()
 			wait_text("", "cleared on submit")
 
-			vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "a brand new thought" })
+			vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "a brand new thought" })
 			reject()
 
 			h.settle(100)
@@ -114,10 +114,10 @@ return {
 
 	["history recalls submitted prompts on <Up> and returns via <Down>"] = function()
 		with_fake_pi()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "first prompt" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "first prompt" })
 		input.submit()
 		wait_text("", "cleared after first submit")
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "second prompt" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "second prompt" })
 		input.submit()
 		wait_text("", "cleared after second submit")
 
@@ -133,11 +133,11 @@ return {
 
 	["history preserves the draft being typed"] = function()
 		with_fake_pi()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "sent already" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "sent already" })
 		input.submit()
 		wait_text("", "cleared after submit")
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "work in progress" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "work in progress" })
 		feed("<Up>")
 		wait_text("sent already", "recalled entry")
 		feed("<Down>")
@@ -146,16 +146,16 @@ return {
 
 	["<Up> on a lower line moves the cursor instead of recalling"] = function()
 		with_fake_pi()
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "sent" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "sent" })
 		input.submit()
 		wait_text("", "cleared after submit")
 
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "alpha", "beta" })
-		vim.api.nvim_win_set_cursor(layout.input_win(), { 2, 0 })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "alpha", "beta" })
+		vim.api.nvim_win_set_cursor(assert(layout.input_win()), { 2, 0 })
 		feed("<Up>")
 
 		h.settle(100)
 		h.eq("alpha\nbeta", input_text())
-		h.eq(1, vim.api.nvim_win_get_cursor(layout.input_win())[1])
+		h.eq(1, vim.api.nvim_win_get_cursor(assert(layout.input_win()))[1])
 	end,
 }

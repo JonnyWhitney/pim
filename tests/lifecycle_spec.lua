@@ -119,7 +119,7 @@ return {
 		h.ok(notified[1].message:find("pi_cmd", 1, true), "notification names the offending setting")
 
 		h.ok(layout.is_open(), "the pi tab is still open")
-		local rendered = table.concat(vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false), "\n")
+		local rendered = table.concat(vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "\n")
 		h.ok(rendered:find("Cannot start pi", 1, true), "the transcript explains itself, got: " .. rendered)
 	end,
 
@@ -189,7 +189,7 @@ return {
 		local guard, pi_tab = start_with_guard_tab()
 
 		local prompts = with_answer("No", function()
-			vim.api.nvim_win_close(layout.input_win(), true)
+			vim.api.nvim_win_close(assert(layout.input_win()), true)
 			h.wait_until(function()
 				return layout.is_open()
 			end, "the declined close to restore the input window", 1000)
@@ -209,7 +209,7 @@ return {
 		local guard, pi_tab = start_with_guard_tab()
 
 		with_answer("Yes", function()
-			vim.api.nvim_win_close(layout.input_win(), true)
+			vim.api.nvim_win_close(assert(layout.input_win()), true)
 			h.wait_until(function()
 				return not client.is_running()
 			end, "pi to stop after confirming the close", 3000)
@@ -226,7 +226,7 @@ return {
 
 		for attempt = 1, 2 do
 			local prompts = with_answer("No", function()
-				vim.api.nvim_win_close(layout.input_win(), true)
+				vim.api.nvim_win_close(assert(layout.input_win()), true)
 				h.wait_until(function()
 					return layout.is_open()
 				end, "the input window to come back on attempt " .. attempt, 1000)

@@ -93,23 +93,21 @@ return {
 	end,
 
 	["an unknown top-level key warns and suggests the real one"] = function()
-		local warning = setup_capturing_warning({ keymap = { submit = "<C-s>" } })
+		local warning = assert(setup_capturing_warning({ keymap = { submit = "<C-s>" } }), "a warning was emitted")
 
-		h.ok(warning ~= nil, "a warning was emitted")
 		h.ok(warning:find("keymap", 1, true), "names the offending key")
 		h.ok(warning:find('did you mean "keymaps"', 1, true), "suggests the real key, got: " .. warning)
 	end,
 
 	["an unknown nested key is reported by its full path"] = function()
-		local warning = setup_capturing_warning({ keymaps = { submitt = "<C-s>" } })
+		local warning = assert(setup_capturing_warning({ keymaps = { submitt = "<C-s>" } }), "a warning was emitted")
 
-		h.ok(warning ~= nil, "a warning was emitted")
 		h.ok(warning:find("keymaps.submitt", 1, true), "reports the dotted path, got: " .. warning)
 		h.ok(warning:find('did you mean "submit"', 1, true), "suggests the real key")
 	end,
 
 	["a typo with no plausible match is reported without a guess"] = function()
-		local warning = setup_capturing_warning({ zzzzzzz = true })
+		local warning = assert(setup_capturing_warning({ zzzzzzz = true }), "a warning was emitted")
 
 		h.ok(warning:find("zzzzzzz", 1, true), "names the offending key")
 		h.ok(not warning:find("did you mean", 1, true), "no wild guess, got: " .. warning)

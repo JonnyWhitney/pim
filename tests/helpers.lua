@@ -29,7 +29,7 @@ function M.fails(fn, pattern)
 	end
 end
 
----@param predicate fun():
+---@param predicate fun(): boolean
 ---@param what string
 ---@param timeout_ms integer|nil
 function M.wait_until(predicate, what, timeout_ms)

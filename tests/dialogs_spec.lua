@@ -205,7 +205,7 @@ return {
 	["set_editor_text replaces the input buffer"] = function()
 		require("pim.ui.layout").open()
 		dialogs.handle({ method = "set_editor_text", text = "from extension" })
-		local buf = require("pim.ui.layout").input_buf()
+		local buf = assert(require("pim.ui.layout").input_buf())
 		h.eq({ "from extension" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
 	end,
 
@@ -239,11 +239,11 @@ return {
 		require("pim").start()
 
 		local layout = require("pim.ui.layout")
-		vim.api.nvim_buf_set_lines(layout.input_buf(), 0, -1, false, { "ask me" })
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "ask me" })
 		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR><CR>", true, false, true), "x", false)
 
 		local ok, err = pcall(h.wait_until, function()
-			local lines = vim.api.nvim_buf_get_lines(layout.transcript_buf(), 0, -1, false)
+			local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
 			return table.concat(lines, "\n"):find("You picked: beta", 1, true) ~= nil
 		end, "the dialog answer to come back through fake pi", 10000)
 

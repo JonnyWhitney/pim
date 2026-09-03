@@ -24,7 +24,9 @@ return {
 		})
 		local current = state.get()
 		h.eq(true, current.connected)
-		h.eq("Model One", current.model.name)
+		---@type { name: string }
+		local model = assert(current.model)
+		h.eq("Model One", model.name)
 		h.eq("medium", current.thinking_level)
 		h.eq("my session", current.session_name)
 		h.eq("/tmp/s.jsonl", current.session_file)
