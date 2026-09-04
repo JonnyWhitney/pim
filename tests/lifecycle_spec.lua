@@ -123,9 +123,11 @@ return {
 		h.ok(rendered:find("Cannot start pi", 1, true), "the transcript explains itself, got: " .. rendered)
 	end,
 
-	["stop closes the pi tab as well as the process"] = function()
+	["stop destroys the pi UI as well as the process"] = function()
 		local guard, pi_tab = start_with_guard_tab()
 		local tabs_before = #vim.api.nvim_list_tabpages()
+		local transcript = assert(layout.transcript_buf())
+		local input = assert(layout.input_buf())
 
 		local prompts = with_answer("Yes", function()
 			require("pim").stop()
@@ -136,6 +138,10 @@ return {
 		h.eq(tabs_before - 1, #vim.api.nvim_list_tabpages(), "the pi tab is gone")
 		h.ok(not vim.api.nvim_tabpage_is_valid(pi_tab), "specifically the pi tab")
 		h.eq(false, layout.is_open())
+		h.eq(nil, layout.transcript_buf(), "the transcript reference was cleared")
+		h.eq(nil, layout.input_buf(), "the input reference was cleared")
+		h.eq(false, vim.api.nvim_buf_is_valid(transcript), "the transcript buffer was deleted")
+		h.eq(false, vim.api.nvim_buf_is_valid(input), "the input buffer was deleted")
 
 		cleanup_guard(guard)
 	end,
@@ -286,7 +292,7 @@ return {
 		end
 
 		h.eq(1, baseline.shutdown, "one VimLeavePre autocmd, not one per connect")
-		h.eq(2, baseline.pi_buffers, "exactly the transcript and input buffers")
+		h.eq(0, baseline.pi_buffers, "stop leaves no pim buffers")
 
 		cleanup_guard(guard)
 	end,

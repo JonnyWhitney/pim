@@ -139,7 +139,7 @@ end
 function M.toggle()
 	local layout = require("pim.ui.layout")
 	if layout.is_open() then
-		layout.close()
+		layout.hide()
 	else
 		M.start()
 	end
@@ -235,8 +235,13 @@ function M.clone()
 end
 
 local function teardown()
+	local layout = require("pim.ui.layout")
+	local exit_neovim = layout.owns_only_ui()
 	require("pim.rpc.client").stop()
-	require("pim.ui.layout").close_tab()
+	layout.destroy()
+	if exit_neovim then
+		vim.cmd("quit")
+	end
 end
 
 ---@param opts { confirm: boolean|nil, on_decline: fun()|nil }|nil

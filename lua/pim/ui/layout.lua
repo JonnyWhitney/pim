@@ -180,42 +180,64 @@ function M.is_closing()
 	return closing
 end
 
-function M.close()
+local function close_window(win)
+	if not vim.api.nvim_win_is_valid(win) then
+		return
+	end
+	local closed = pcall(vim.api.nvim_win_close, win, true)
+	if closed or not vim.api.nvim_win_is_valid(win) then
+		return
+	end
+
+	-- Neovim must keep one window. Remove pim from that window instead.
+	local placeholder = vim.api.nvim_create_buf(true, false)
+	vim.api.nvim_win_set_buf(win, placeholder)
+end
+
+function M.hide()
+	local targets = wins
+	if targets == nil then
+		return
+	end
+
 	closing = true
-	if wins ~= nil then
-		for _, win in ipairs({ wins.input, wins.transcript }) do
-			if vim.api.nvim_win_is_valid(win) then
-				pcall(vim.api.nvim_win_close, win, true)
-			end
-		end
+	for _, win in ipairs({ targets.input, targets.transcript }) do
+		pcall(close_window, win)
 	end
 	wins = nil
 	closing = false
 end
 
----@return boolean
-function M.close_tab()
-	local targets = wins
-	wins = nil
-	if targets == nil then
-		return true
+function M.destroy()
+	local targets = { transcript = bufs.transcript, input = bufs.input }
+	M.hide()
+	for role, buf in pairs(targets) do
+		if buf_valid(buf) then
+			pcall(vim.api.nvim_buf_delete, buf, { force = true })
+		end
+		bufs[role] = nil
 	end
+end
 
-	closing = true
-	local ok, err = true, nil
-	for _, win in ipairs({ targets.input, targets.transcript }) do
-		if ok and vim.api.nvim_win_is_valid(win) then
-			ok, err = pcall(vim.api.nvim_win_call, win, function()
-				vim.cmd("quit")
-			end)
+function M.owns_only_ui()
+	if wins == nil then
+		return false
+	end
+	local owned = {}
+	for _, win in ipairs({ wins.transcript, wins.input }) do
+		if vim.api.nvim_win_is_valid(win) then
+			owned[win] = true
 		end
 	end
-	closing = false
-
-	if not ok then
-		vim.notify(("[pim] Cannot close the pi tab: %s"):format(tostring(err)), vim.log.levels.WARN)
+	if not next(owned) then
+		return false
 	end
-	return ok
+	for _, win in ipairs(vim.api.nvim_list_wins()) do
+		if not owned[win] then
+			return false
+		end
+	end
+	return true
 end
 
 function M.focus_input()

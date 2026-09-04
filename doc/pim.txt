@@ -57,6 +57,7 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 
 :PiToggle                                                          *:PiToggle*
     Show or hide the pi windows. pi continues to run while the windows hide.
+    The pim buffers and input draft remain.
 
 :PiSend [{text}]                                                     *:PiSend*
     Send {text} as a prompt. Without {text}, send the input buffer contents.
@@ -125,8 +126,9 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     Restart pi. pim resumes the current session if its session file exists.
 
 :PiStop[!]                                                           *:PiStop*
-    Stop pi and close the pi windows. pim asks for confirmation. Use [!]
-    to skip confirmation. See |pim-leaving|.
+    Stop pi and delete the pim windows and buffers, including the input
+    draft. pim asks for confirmation. Use [!] to skip confirmation. See
+    |pim-leaving|.
 
 :PiLog                                                                *:PiLog*
     Open the event log in a split. Set `debug = true` to include raw JSONL

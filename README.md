@@ -48,9 +48,10 @@ alias pim='nvim -c PiStart'
 pim reuses an empty initial tab. If you close one pi window, `:PiStart`
 restores that window. It does not create a second pi layout.
 
-`:PiStop` asks for confirmation, then stops pi and closes the pi windows.
-`:PiStop!` does not ask for confirmation. `:PiToggle` hides or shows the
-windows and does not stop pi.
+`:PiStop` asks for confirmation, then stops pi and deletes the pim windows
+and buffers, including the input draft. `:PiStop!` does not ask for
+confirmation. `:PiToggle` hides or shows the windows, keeps the buffers and
+input draft, and does not stop pi.
 
 The session file remains after you close the UI. `:PiStart` resumes that
 session. Unsaved changes can prevent Neovim from closing, as with `:quit`.

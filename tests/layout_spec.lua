@@ -29,11 +29,7 @@ local function user_buf(name)
 end
 
 local function drop_pi_bufs()
-	for _, buf in ipairs({ assert(layout.transcript_buf()), assert(layout.input_buf()) }) do
-		if buf then
-			vim.api.nvim_buf_delete(buf, { force = true })
-		end
-	end
+	layout.destroy()
 end
 
 local function guarded(fn)
@@ -44,7 +40,6 @@ local function guarded(fn)
 
 	local ok, err = pcall(fn, guard)
 
-	layout.close()
 	drop_pi_bufs()
 	for _, buf in ipairs(scratch) do
 		pcall(vim.api.nvim_buf_delete, buf, { force = true })
@@ -63,6 +58,60 @@ local function guarded(fn)
 end
 
 return {
+	["hide closes windows but keeps buffers and the input draft"] = function()
+		guarded(function()
+			layout.open()
+			local transcript = assert(layout.transcript_buf())
+			local input = assert(layout.input_buf())
+			vim.api.nvim_buf_set_lines(input, 0, -1, false, { "unfinished draft" })
+
+			layout.hide()
+			h.eq(false, layout.is_open())
+			h.eq(0, windows_showing(transcript), "the transcript window closed")
+			h.eq(0, windows_showing(input), "the input window closed")
+			h.ok(vim.api.nvim_buf_is_valid(transcript), "the transcript buffer remains")
+			h.ok(vim.api.nvim_buf_is_valid(input), "the input buffer remains")
+
+			layout.hide()
+			layout.open()
+			h.eq(transcript, layout.transcript_buf(), "the same transcript buffer returns")
+			h.eq(input, layout.input_buf(), "the same input buffer returns")
+			h.eq({ "unfinished draft" }, vim.api.nvim_buf_get_lines(input, 0, -1, false))
+		end)
+	end,
+
+	["destroy removes buffers and tolerates partial layouts"] = function()
+		guarded(function()
+			layout.open()
+			local transcript = assert(layout.transcript_buf())
+			local input = assert(layout.input_buf())
+			vim.api.nvim_win_close(assert(layout.input_win()), true)
+
+			layout.destroy()
+			h.eq(false, layout.is_open())
+			h.eq(nil, layout.transcript_buf())
+			h.eq(nil, layout.input_buf())
+			h.eq(false, vim.api.nvim_buf_is_valid(transcript))
+			h.eq(false, vim.api.nvim_buf_is_valid(input))
+			layout.destroy()
+		end)
+	end,
+
+	["ownership detection distinguishes pim from other UI"] = function()
+		guarded(function()
+			layout.open()
+			h.eq(false, layout.owns_only_ui(), "the guard tab is separate UI")
+		end)
+
+		vim.cmd("tabnew")
+		vim.cmd("tabonly")
+		layout.open()
+		h.eq(true, layout.owns_only_ui(), "all remaining windows belong to pim")
+		layout.destroy()
+		h.eq(false, layout.owns_only_ui(), "a destroyed layout owns no UI")
+		h.eq(1, #vim.api.nvim_list_wins(), "test cleanup keeps Neovim alive")
+	end,
+
 	["a buffer whose name merely contains ours is left alone"] = function()
 		guarded(function()
 			drop_pi_bufs()
@@ -106,7 +155,6 @@ return {
 			h.ok(vim.api.nvim_buf_is_valid(held), "the user's buffer was not taken")
 			h.ok(vim.api.nvim_buf_is_valid(held_2), "nor the one holding the first suffix")
 
-			layout.close()
 			drop_pi_bufs()
 			local held_3 = user_buf(TRANSCRIPT .. " (3)")
 
