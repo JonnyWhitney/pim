@@ -11,6 +11,7 @@ local NO_DEADLINE = { bash = true }
 
 ---@type PimProcessHandle|nil
 local proc = nil
+local generation = 0
 local next_id = 0
 local pending = {}
 local handlers = {}
@@ -48,6 +49,14 @@ local function reject_all_pending(reason)
 	for _, entry in pairs(rejected) do
 		cancel_timer(entry)
 		entry.callback(false, reason)
+	end
+end
+
+local function discard_all_pending()
+	local discarded = pending
+	pending = {}
+	for _, entry in pairs(discarded) do
+		cancel_timer(entry)
 	end
 end
 
@@ -117,16 +126,26 @@ function M.start(opts)
 		error("[pim] pi is already running", 0)
 	end
 	handlers = opts or {}
+	generation = generation + 1
+	local current_generation = generation
 	next_id = 0
 	reject_all_pending("pi restarted")
 
 	local cmd = build_cmd(opts and opts.extra_args)
+	log.clear()
 	log.add("*", "spawn: " .. table.concat(cmd, " "))
 	local handle, err = process.spawn({
 		cmd = cmd,
 		cwd = opts and opts.cwd or nil,
-		on_line = on_line,
+		on_line = function(line)
+			if generation == current_generation then
+				on_line(line)
+			end
+		end,
 		on_error = function(traceback, count)
+			if generation ~= current_generation then
+				return
+			end
 			log.add("!", ("%d handler error(s), first:\n%s"):format(count, traceback))
 			vim.notify(
 				("[pim] Cannot handle %d incoming message%s. See :PiLog."):format(count, count == 1 and "" or "s"),
@@ -134,6 +153,9 @@ function M.start(opts)
 			)
 		end,
 		on_overflow = function(dropped)
+			if generation ~= current_generation then
+				return
+			end
 			log.add("!", ("Dropped %d bytes without a line terminator. Read the next message."):format(dropped))
 			vim.notify(
 				"[pim] pi sent a message that is too large. Part of the conversation can be missing. See :PiLog.",
@@ -141,6 +163,10 @@ function M.start(opts)
 			)
 		end,
 		on_exit = function(code, intentional, stderr_tail)
+			if generation ~= current_generation then
+				return
+			end
+			proc = nil
 			log.add("*", ("pi exited with code %d%s"):format(code, intentional and " (requested)" or ""))
 			reject_all_pending("pi exited")
 			if handlers.on_exit then
@@ -160,6 +186,18 @@ end
 function M.stop(wait_ms)
 	if proc then
 		proc.stop(wait_ms)
+	end
+end
+
+function M.reset()
+	local active = proc
+	generation = generation + 1
+	proc = nil
+	handlers = {}
+	next_id = 0
+	discard_all_pending()
+	if active then
+		active.stop()
 	end
 end
 

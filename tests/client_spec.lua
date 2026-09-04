@@ -233,6 +233,21 @@ return {
 		h.eq(true, exited.intentional)
 	end,
 
+	["runtime reset stops pi and discards pending callbacks"] = function()
+		start_fake()
+		local calls = 0
+		client.request("never_reply", nil, function()
+			calls = calls + 1
+		end)
+
+		client.reset()
+		h.settle(100)
+
+		h.eq(false, client.is_running())
+		h.eq(0, calls, "abandoned application callbacks do not run during cleanup")
+		client.reset()
+	end,
+
 	["pending requests are rejected on shutdown"] = function()
 		start_fake()
 		local result

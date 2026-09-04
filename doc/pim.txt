@@ -257,7 +257,9 @@ Use these commands to check pim:
   :checkhealth pim    Check Neovim, pi, and the session directory.
   :PiLog                  Show pim events and pi messages.
 <
-Set `debug = true` in |pim-setup| to record all raw JSONL lines.
+Set `debug = true` in |pim-setup| to record all raw JSONL lines. The event
+log remains available after |:PiStop|. pim clears it immediately before it
+starts a new pi process. |:PiNewSession| and |:PiToggle| do not clear it.
 
 pi does not start ~
 

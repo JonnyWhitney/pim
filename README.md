@@ -212,7 +212,9 @@ This prevents a newer extension from waiting without a response.
 :PiLog                Show pim events and pi messages.
 ```
 
-Use `debug = true` to record every raw JSONL line in `:PiLog`.
+Use `debug = true` to record every raw JSONL line in `:PiLog`. The event log
+remains available after `:PiStop`. pim clears it immediately before it starts
+a new pi process. `:PiNewSession` and `:PiToggle` do not clear it.
 
 - **pi does not start:** Check `pi_cmd`. Keep the tab open and run `:PiRestart`
   after you correct the setting.

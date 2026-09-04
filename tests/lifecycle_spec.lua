@@ -291,7 +291,7 @@ return {
 			h.eq(baseline, census(), "state accumulated after cycle " .. cycle)
 		end
 
-		h.eq(1, baseline.shutdown, "one VimLeavePre autocmd, not one per connect")
+		h.eq(0, baseline.shutdown, "stop removes the VimLeavePre autocmd")
 		h.eq(0, baseline.pi_buffers, "stop leaves no pim buffers")
 
 		cleanup_guard(guard)
@@ -403,6 +403,74 @@ return {
 			end),
 			"the failed recovery is reported"
 		)
+	end,
+
+	["runtime cleanup is idempotent and keeps configuration and the event log"] = function()
+		start_and_connect()
+		local log = require("pim.log")
+		local input = require("pim.ui.input")
+		local lifecycle = require("pim.lifecycle")
+		local configured_command = vim.deepcopy(config.get().pi_cmd)
+
+		log.add("*", "keep this process log")
+		input.restore_queued({ "old queued prompt" })
+		input.set_locked(true)
+		require("pim.state").update({ is_streaming = true, bash_running = true, session_name = "old" })
+
+		lifecycle.cleanup()
+		lifecycle.cleanup()
+
+		h.eq(false, client.is_running())
+		h.eq(false, input.is_locked())
+		h.eq(false, require("pim.ui.tree").is_open())
+		h.eq(nil, layout.transcript_buf())
+		h.eq(nil, layout.input_buf())
+		h.eq(false, require("pim.state").get().is_streaming)
+		h.eq(false, require("pim.state").get().bash_running)
+		h.eq(nil, require("pim.state").get().session_name)
+		h.eq(configured_command, config.get().pi_cmd, "cleanup keeps user configuration")
+		h.ok(
+			table.concat(log.lines(), "\n"):find("keep this process log", 1, true),
+			"cleanup keeps the previous process log"
+		)
+
+		layout.open()
+		input.setup()
+		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Up>", true, false, true), "x", false)
+		h.settle(50)
+		h.eq({ "" }, vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "input history was reset")
+		h.eq({ "" }, vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "transcript was reset")
+		h.eq({}, require("pim.completion").omnifunc(0, "/"), "slash-command completion was reset")
+	end,
+
+	["log clears for a new process but not session changes, toggles, or stop"] = function()
+		start_and_connect()
+		local log = require("pim.log")
+		log.add("*", "marker before session actions")
+
+		require("pim").new_session()
+		h.wait_until(function()
+			return require("pim.state").get().session_id == "fresh-session"
+		end, "new session refresh", 5000)
+		require("pim").toggle()
+		require("pim").toggle()
+		h.ok(
+			table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
+			"new session and toggle keep the process log"
+		)
+
+		require("pim").restart()
+		h.wait_until(function()
+			return require("pim.state").get().connected
+		end, "restart connection", 5000)
+		h.ok(
+			not table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
+			"restart clears the old process log"
+		)
+
+		log.add("*", "marker before stop")
+		require("pim").stop({ confirm = false })
+		h.ok(table.concat(log.lines(), "\n"):find("marker before stop", 1, true), "stop keeps the process log")
 	end,
 
 	["an intentional stop reports stopped with no exit code"] = function()

@@ -204,6 +204,7 @@ end
 function M.reset()
 	history = {}
 	nav_index, draft = nil, nil
+	attached = {}
 	M.set_locked(false)
 end
 

@@ -44,23 +44,10 @@ function M.settle(ms)
 	vim.wait(ms or 100)
 end
 
--- Specs share one headless Neovim process, so reset all plugin state between cases.
+-- Specs share one headless Neovim process. Runtime cleanup uses the application boundary.
 function M.reset_all()
-	local client = require("pim.rpc.client")
-	if client.is_running() then
-		client.stop()
-	end
-	require("pim.ui.dialogs").reset()
-	require("pim.ui.transcript").reset()
-	require("pim.ui.tree").reset()
-	require("pim.ui.layout").destroy()
-	require("pim.events").reset()
-	require("pim.state").reset()
-	require("pim.state").reset_observers()
-	require("pim.ui.input").reset()
-	require("pim.ui.statusline").reset()
-	require("pim.bash").reset()
-	require("pim.completion").reset()
+	require("pim.lifecycle").cleanup()
+	-- Configuration and the event log survive application cleanup. Reset them only for test isolation.
 	require("pim.log").clear()
 	require("pim.config").setup()
 end

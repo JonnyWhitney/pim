@@ -90,9 +90,6 @@ local function connect(extra_args)
 	vim.api.nvim_create_autocmd("VimLeavePre", {
 		group = vim.api.nvim_create_augroup("pim-shutdown", { clear = true }),
 		callback = function()
-			require("pim.ui.statusline").shutdown()
-			require("pim.ui.transcript").shutdown()
-			require("pim.ui.dialogs").reset()
 			require("pim.rpc.client").stop(1000)
 		end,
 	})
@@ -237,8 +234,7 @@ end
 local function teardown()
 	local layout = require("pim.ui.layout")
 	local exit_neovim = layout.owns_only_ui()
-	require("pim.rpc.client").stop()
-	layout.destroy()
+	require("pim.lifecycle").cleanup()
 	if exit_neovim then
 		vim.cmd("quit")
 	end
