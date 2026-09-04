@@ -40,7 +40,7 @@ vim.api.nvim_create_user_command("PiTrust", function()
 end, { desc = "Manage trust for the current project" })
 
 vim.api.nvim_create_user_command("PiNewSession", function()
-	require("pim").new_session()
+	require("pim.sessions").new()
 end, { desc = "Start a new pi session" })
 
 vim.api.nvim_create_user_command("PiFork", function()
@@ -48,7 +48,7 @@ vim.api.nvim_create_user_command("PiFork", function()
 end, { desc = "Fork pi from an earlier prompt" })
 
 vim.api.nvim_create_user_command("PiClone", function()
-	require("pim").clone()
+	require("pim.sessions").clone()
 end, { desc = "Clone the current pi branch" })
 
 vim.api.nvim_create_user_command("PiModel", function()

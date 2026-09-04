@@ -117,7 +117,7 @@ return {
 			notified = message
 		end
 
-		local ok, err = pcall(require("pim").clone)
+		local ok, err = pcall(require("pim.sessions").clone)
 		client.clone = real_clone
 		vim.notify = real_notify
 		if not ok then
@@ -175,8 +175,9 @@ return {
 		end, "enter to close the tree", 5000)
 	end,
 
-	["tree does not open while pi is busy"] = function()
-		state.update({ is_streaming = true })
+	["tree does not open before an agent run settles"] = function()
+		state.handle_event({ type = "agent_start" })
+		state.handle_event({ type = "agent_end", willRetry = false })
 		local calls = 0
 		local real_get_tree = client.get_tree
 		---@diagnostic disable-next-line: duplicate-set-field

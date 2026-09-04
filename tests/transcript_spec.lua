@@ -80,7 +80,7 @@ return {
 
 		local wiped = assert(layout.transcript_buf())
 		vim.api.nvim_buf_delete(wiped, { force = true })
-		layout.close()
+		layout.hide()
 		layout.open()
 		h.ok(assert(layout.transcript_buf()) ~= wiped, "layout built a replacement buffer")
 

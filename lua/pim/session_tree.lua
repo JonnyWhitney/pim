@@ -1,37 +1,20 @@
+local content = require("pim.content")
+
 local M = {}
 
 local PREVIEW_WIDTH = 72
 
-local function content_text(content)
-	if type(content) == "string" then
-		return content
-	end
-	if type(content) ~= "table" then
-		return ""
-	end
-	for _, block in ipairs(content) do
-		if block.type == "text" and type(block.text) == "string" then
-			return block.text
-		end
-	end
-	return ""
-end
-
 local function preview(text)
-	text = vim.trim((text or ""):gsub("%s+", " "))
-	if vim.fn.strchars(text) > PREVIEW_WIDTH then
-		return vim.fn.strcharpart(text, 0, PREVIEW_WIDTH - 1) .. "…"
-	end
-	return text
+	return content.one_line(text, PREVIEW_WIDTH)
 end
 
----@param entry table
+---@param entry PimSessionEntry
 ---@return string
 function M.summary(entry)
 	if entry.type == "message" then
 		local message = entry.message or {}
 		local role = message.role
-		local text = preview(content_text(message.content))
+		local text = preview(content.first_text(message.content))
 		if role == "user" then
 			return "You: " .. (text ~= "" and text or "[empty prompt]")
 		elseif role == "assistant" then
@@ -64,9 +47,9 @@ function M.summary(entry)
 	return entry.type or "unknown entry"
 end
 
----@param tree table[]
+---@param tree PimSessionTreeNode[]
 ---@param leaf_id string|nil
----@return table[]
+---@return PimTreeRow[]
 function M.flatten(tree, leaf_id)
 	local rows = {}
 
@@ -96,9 +79,9 @@ function M.flatten(tree, leaf_id)
 	return rows
 end
 
----@param tree table[]
+---@param tree PimSessionTreeNode[]
 ---@param entry_id string
----@return table[]|nil
+---@return PimSessionEntry[]|nil
 function M.path(tree, entry_id)
 	local entries = {}
 
@@ -119,9 +102,9 @@ function M.path(tree, entry_id)
 	return visit(tree) and entries or nil
 end
 
----@param tree table[]
+---@param tree PimSessionTreeNode[]
 ---@param entry_id string
----@return table[]|nil
+---@return PimMessage[]|nil
 function M.preview_messages(tree, entry_id)
 	local entries = M.path(tree, entry_id)
 	if not entries then

@@ -1,3 +1,5 @@
+local state_store = require("pim.state")
+
 local M = {}
 
 local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
@@ -32,7 +34,7 @@ local function format_tokens(tokens)
 	return ("%.1f%s"):format(scaled, suffix)
 end
 
----@param state table
+---@param state PimApplicationState
 ---@return string
 function M.build(state)
 	local model = state.model or {}
@@ -72,7 +74,7 @@ function M.build(state)
 		parts[#parts + 1] = SPINNER[spinner_index] .. " retrying"
 	elseif state.bash_running then
 		parts[#parts + 1] = SPINNER[spinner_index] .. " !"
-	elseif state.is_streaming then
+	elseif state_store.is_busy(state) then
 		parts[#parts + 1] = SPINNER[spinner_index]
 	end
 
@@ -94,17 +96,13 @@ function M.build(state)
 	return " " .. esc(table.concat(parts, " │ "))
 end
 
-local function busy(state)
-	return state.is_streaming or state.is_compacting or state.retrying or state.bash_running
-end
-
 local function refresh()
 	local layout = require("pim.ui.layout")
 	local win = layout.transcript_win()
 	if not win then
 		return
 	end
-	local state = require("pim.state").get()
+	local state = state_store.get()
 	vim.api.nvim_set_option_value("winbar", M.build(state), { win = win })
 end
 
@@ -130,8 +128,9 @@ local function start_spinner()
 	end)
 end
 
+---@param state PimApplicationState
 local function on_state_changed(state)
-	if busy(state) then
+	if state_store.is_busy(state) then
 		start_spinner()
 	else
 		stop_spinner()
@@ -152,9 +151,9 @@ end
 function M.attach()
 	if not attached then
 		attached = true
-		require("pim.state").subscribe(on_state_changed)
+		state_store.subscribe(on_state_changed)
 	end
-	on_state_changed(require("pim.state").get())
+	on_state_changed(state_store.get())
 end
 
 return M

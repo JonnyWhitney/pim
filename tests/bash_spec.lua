@@ -3,7 +3,7 @@ local bash = require("pim.bash")
 local client = require("pim.rpc.client")
 local config = require("pim.config")
 local layout = require("pim.ui.layout")
-local render = require("pim.ui.render")
+local message_renderer = require("pim.render.message")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
@@ -56,7 +56,7 @@ return {
 	end,
 
 	["a running command renders before its result arrives"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "sleep 5",
 			running = true,
@@ -65,7 +65,7 @@ return {
 	end,
 
 	["excluded output is marked as such"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "cat secrets",
 			output = "hunter2",
@@ -76,7 +76,7 @@ return {
 	end,
 
 	["a failing excluded command shows both markers"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "make",
 			output = "",
@@ -87,7 +87,7 @@ return {
 	end,
 
 	["a rejected bash command renders as an error"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "ls",
 			failed = true,
@@ -139,15 +139,15 @@ return {
 			return real_request(command_type, params, callback)
 		end
 
-		state.update({ bash_running = true, is_streaming = true })
+		state.update({ bash_running = true, run_active = true, is_streaming = true })
 		require("pim").abort()
 		state.update({ bash_running = false })
 		require("pim").abort()
 
 		client.request = real_request
-		state.update({ is_streaming = false })
+		state.update({ run_active = false, is_streaming = false })
 
-		h.eq({ "abort_bash", "abort" }, sent, "bash takes precedence, then the agent")
+		h.eq({ "abort_bash", "clear_queue", "abort" }, sent, "bash stays direct; agent abort clears its queue first")
 	end,
 
 	["abort does nothing when nothing is running"] = function()
@@ -159,7 +159,7 @@ return {
 			sent[#sent + 1] = command_type
 		end
 
-		state.update({ bash_running = false, is_streaming = false })
+		state.update({ bash_running = false, run_active = false, is_streaming = false })
 		require("pim").abort()
 
 		client.request = real_request

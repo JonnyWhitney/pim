@@ -112,6 +112,41 @@ return {
 		wait_text("a brand new thought", "<Down> returns the draft")
 	end,
 
+	["cleared queued prompts stay distinct and the first returns to empty input"] = function()
+		fresh()
+		input.restore_queued({ "change direction", "also add tests", "write docs" })
+
+		h.eq("change direction", input_text(), "the next prompt in delivery order is restored")
+		feed("<Up>")
+		wait_text("write docs", "the follow-up remains a separate history entry")
+		feed("<Up>")
+		wait_text("also add tests", "the second steering prompt remains separate")
+		feed("<Up>")
+		wait_text("change direction", "the first steering prompt remains in history")
+	end,
+
+	["cleared queued prompts do not overwrite a newer draft"] = function()
+		fresh()
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "newer draft" })
+		local notified = {}
+		local real_notify = vim.notify
+		vim.notify = function(message, level)
+			notified[#notified + 1] = { message = message, level = level }
+		end
+
+		local ok, err = pcall(input.restore_queued, { "queued steer", "queued follow-up" })
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq("newer draft", input_text(), "the newer draft wins")
+		h.eq(1, #notified, "one short recovery notice is shown")
+		h.ok(notified[1].message:find("<Up>", 1, true), "the notice explains how to recall queued text")
+		feed("<Up>")
+		wait_text("queued follow-up", "recovered prompts were added to history")
+	end,
+
 	["history recalls submitted prompts on <Up> and returns via <Down>"] = function()
 		with_fake_pi()
 		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "first prompt" })

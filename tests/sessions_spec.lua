@@ -1,4 +1,5 @@
 local h = require("helpers")
+local session_files = require("pim.session_files")
 local sessions = require("pim.sessions")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
@@ -22,21 +23,46 @@ local function with_agent_dir(directory, fn)
 end
 
 return {
+	["workflow listing delegates to session files"] = function()
+		local expected = { { id = "session-1" } }
+		local original = session_files.list
+		local calls = 0
+		---@diagnostic disable-next-line: duplicate-set-field
+		session_files.list = function()
+			calls = calls + 1
+			return expected
+		end
+		local actual = sessions.list()
+		session_files.list = original
+
+		h.eq(expected, actual)
+		h.eq(1, calls)
+	end,
+
+	["old application session APIs are removed"] = function()
+		local pim = require("pim")
+		h.eq(nil, pim.refresh)
+		h.eq(nil, pim.new_session)
+		h.eq(nil, pim.fork)
+		h.eq(nil, pim.clone)
+	end,
+
 	["cwd encoding matches pi's real directory naming"] = function()
 		h.eq(
 			"--Users-jonathanloughlin-proj-PiExtentions-pim--",
-			sessions.encode_cwd("/Users/jonathanloughlin/proj/PiExtentions/pim")
+			session_files.encode_cwd("/Users/jonathanloughlin/proj/PiExtentions/pim")
 		)
 	end,
 
 	["session directory uses PI_CODING_AGENT_DIR"] = function()
 		with_agent_dir("/tmp/pim-agent", function()
-			h.eq("/tmp/pim-agent/sessions/--tmp-proj--", sessions.dir_for("/tmp/proj"))
+			h.eq("/tmp/pim-agent/sessions/--tmp-proj--", session_files.dir_for("/tmp/proj"))
 		end)
 	end,
 
 	["named session parses header, name, count, and preview"] = function()
-		local info = assert(sessions.parse_lines(read_lines(fixtures .. "/session_named.jsonl")), "fixture must parse")
+		local info =
+			assert(session_files.parse_lines(read_lines(fixtures .. "/session_named.jsonl")), "fixture must parse")
 		h.eq("aaaa-1111", info.id)
 		h.eq("/tmp/proj", info.cwd)
 		h.eq("parser work", info.name)
@@ -46,7 +72,7 @@ return {
 
 	["unnamed session falls back to a truncated one-line preview"] = function()
 		local info =
-			assert(sessions.parse_lines(read_lines(fixtures .. "/session_unnamed.jsonl")), "fixture must parse")
+			assert(session_files.parse_lines(read_lines(fixtures .. "/session_unnamed.jsonl")), "fixture must parse")
 		h.eq(nil, info.name)
 		h.eq(1, info.message_count)
 		local preview = assert(info.preview, "fixture must have a preview")
@@ -54,14 +80,23 @@ return {
 		h.ok(preview:find("…", 1, true), "long preview truncated")
 	end,
 
+	["session preview skips user messages without text"] = function()
+		local info = assert(session_files.parse_lines({
+			'{"type":"session","id":"one","timestamp":"now","cwd":"/tmp"}',
+			'{"type":"message","message":{"role":"user","content":[{"type":"image","mimeType":"image/png"}]}}',
+			'{"type":"message","message":{"role":"user","content":[{"type":"text","text":"later prompt"}]}}',
+		}))
+		h.eq("later prompt", info.preview)
+	end,
+
 	["non-session files are rejected"] = function()
-		h.eq(nil, sessions.parse_lines(read_lines(fixtures .. "/not_a_session.jsonl")))
-		h.eq(nil, sessions.parse_lines({}))
-		h.eq(nil, sessions.parse_lines({ "garbage not json" }))
+		h.eq(nil, session_files.parse_lines(read_lines(fixtures .. "/not_a_session.jsonl")))
+		h.eq(nil, session_files.parse_lines({}))
+		h.eq(nil, session_files.parse_lines({ "garbage not json" }))
 	end,
 
 	["list_dir returns parseable sessions only"] = function()
-		local found = sessions.list_dir(fixtures)
+		local found = session_files.list_dir(fixtures)
 		h.eq(2, #found)
 		local ids = { found[1].id, found[2].id }
 		table.sort(ids)
@@ -70,7 +105,7 @@ return {
 	end,
 
 	["list_dir of a missing directory is empty"] = function()
-		h.eq({}, sessions.list_dir(fixtures .. "/does-not-exist"))
+		h.eq({}, session_files.list_dir(fixtures .. "/does-not-exist"))
 	end,
 
 	["end-to-end: picker switch cold-renders the target session"] = function()

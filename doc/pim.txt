@@ -31,7 +31,7 @@ proposed operation while a permission dialog is open. This preview is
 display-only and does not add a message to the model context. Completed tool calls and their
 results start folded by default. Use <Tab> to toggle a fold.
 
-pim targets Neovim nightly and requires the `pi` command. It has no plugin
+pim targets Neovim nightly and requires Pi 0.84.4 or newer. It has no plugin
 dependencies. Other Neovim releases are not supported.
 
 The transcript winbar shows the provider, model, thinking level, pi
@@ -57,12 +57,14 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 
 :PiToggle                                                          *:PiToggle*
     Show or hide the pi windows. pi continues to run while the windows hide.
+    The pim buffers and input draft remain.
 
 :PiSend [{text}]                                                     *:PiSend*
     Send {text} as a prompt. Without {text}, send the input buffer contents.
 
 :PiAbort                                                            *:PiAbort*
-    Stop the current agent run. Stop a shell command first when one is active.
+    Clear queued prompts, restore them to input history, and stop the current
+    agent run. Stop a shell command directly when one is active.
 
 :PiResume                                                          *:PiResume*
     Select a session for the current working directory. pim loads the
@@ -75,6 +77,10 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     Use j and k to move. p previews the selected entry. q returns from a
     preview to the tree. r forks a selected user prompt. c clones the active
     branch. In the tree, <CR> or q restores the active transcript.
+
+    pim blocks new, switch, fork, and clone session actions while pi is
+    streaming, compacting, running Bash, or retrying. An agent run remains
+    busy through queued continuations until pi reports that it settled.
 
 :PiTrust                                                            *:PiTrust*
     Manage project trust for Neovim's current working directory. This command
@@ -124,8 +130,9 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     Restart pi. pim resumes the current session if its session file exists.
 
 :PiStop[!]                                                           *:PiStop*
-    Stop pi and close the pi windows. pim asks for confirmation. Use [!]
-    to skip confirmation. See |pim-leaving|.
+    Stop pi and delete the pim windows and buffers, including the input
+    draft. pim asks for confirmation. Use [!] to skip confirmation. See
+    |pim-leaving|.
 
 :PiLog                                                                *:PiLog*
     Open the event log in a split. Set `debug = true` to include raw JSONL
@@ -162,6 +169,11 @@ Insert-mode <CR> inserts a new line. pim does not remap Esc.
 pim clears the input after you send it. If pi rejects the prompt, pim
 restores it when the input remains empty. If you enter new text, press <Up> to
 recall the rejected prompt.
+
+When you abort an agent run, pim first clears queued steering and follow-up
+prompts. It puts the first queued prompt in an empty input buffer and keeps
+each queued prompt as a separate history entry. If the input has a newer
+draft, pim preserves it and adds the queued prompts to history.
 
                                                               *pim-shell*
 Shell commands ~
@@ -204,11 +216,11 @@ Calling setup() is optional. All options have default values.
     debug = false,              -- Record raw RPC traffic for :PiLog.
   })
 <
-Invalid option values cause an error. Unknown option keys cause a warning. The
-warning suggests a key when pim finds a close match.
+Invalid option values cause an error. Unknown option keys cause a warning that
+includes the full key path.
 >
   [pim] ignoring unknown config keys:
-    keymap — did you mean "keymaps"?
+    keymaps.submitt
 <
 The warning does not stop setup(). Valid options still apply.
 
@@ -249,7 +261,9 @@ Use these commands to check pim:
   :checkhealth pim    Check Neovim, pi, and the session directory.
   :PiLog                  Show pim events and pi messages.
 <
-Set `debug = true` in |pim-setup| to record all raw JSONL lines.
+Set `debug = true` in |pim-setup| to record all raw JSONL lines. The event
+log remains available after |:PiStop|. pim clears it immediately before it
+starts a new pi process. |:PiNewSession| and |:PiToggle| do not clear it.
 
 pi does not start ~
 

@@ -1,120 +1,123 @@
 local M = {}
 
-local PREVIEW_WIDTH = 60
-
-function M.encode_cwd(cwd)
-	return "--" .. cwd:gsub("^/", ""):gsub("/", "-") .. "--"
-end
-
----@return string
-function M.dir_for(cwd)
-	return vim.fs.joinpath(require("pim.config").pi_sessions_dir(), M.encode_cwd(cwd))
-end
-
-local function decode(line)
-	local ok, value = pcall(vim.json.decode, line, { luanil = { object = true, array = true } })
-	if ok and type(value) == "table" then
-		return value
+local function can_change()
+	if require("pim.ui.tree").is_open() then
+		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
+		return false
 	end
-	return nil
+	if require("pim.state").is_busy() then
+		vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
+		return false
+	end
+	return true
 end
 
-local function preview_from(message)
-	local content = message.content
-	local text
-	if type(content) == "string" then
-		text = content
-	elseif type(content) == "table" then
-		for _, block in ipairs(content) do
-			if block.type == "text" then
-				text = block.text
-				break
-			end
+---@param action string
+---@param success boolean
+---@param data any
+---@return boolean
+local function valid_response(action, success, data)
+	if not success then
+		vim.notify(("[pim] %s failed: %s"):format(action, tostring(data)), vim.log.levels.ERROR)
+		return false
+	end
+	if type(data) ~= "table" or type(data.cancelled) ~= "boolean" then
+		vim.notify(("[pim] %s returned invalid data"):format(action), vim.log.levels.WARN)
+		return false
+	end
+	---@cast data PimRpcSessionActionResponse
+	if data.cancelled then
+		vim.notify(("[pim] %s cancelled by an extension"):format(action), vim.log.levels.WARN)
+		return false
+	end
+	return true
+end
+
+function M.list()
+	return require("pim.session_files").list()
+end
+
+function M.refresh()
+	local client = require("pim.rpc.client")
+	local state = require("pim.state")
+
+	client.get_state(function(success, data)
+		if not success then
+			vim.notify("[pim] get_state failed: " .. tostring(data), vim.log.levels.ERROR)
+		elseif type(data) ~= "table" then
+			vim.notify("[pim] pi did not return state data", vim.log.levels.WARN)
+		else
+			---@cast data PimRpcState
+			state.apply_rpc_state(data)
+			state.poll_stats()
 		end
-	end
-	if not text then
-		return nil
-	end
-	text = vim.trim(text:gsub("%s+", " "))
-	if vim.fn.strchars(text) > PREVIEW_WIDTH then
-		text = vim.fn.strcharpart(text, 0, PREVIEW_WIDTH - 1) .. "…"
-	end
-	return text
-end
-
----@param lines string[]
----@return { id: string, timestamp: string, cwd: string, name: string|nil, preview: string|nil, message_count: integer, path: string|nil, mtime: integer|nil }|nil
-function M.parse_lines(lines)
-	if #lines == 0 then
-		return nil
-	end
-	local header = decode(lines[1])
-	if not header or header.type ~= "session" then
-		return nil
-	end
-
-	local info = {
-		id = header.id,
-		timestamp = header.timestamp,
-		cwd = header.cwd,
-		name = nil,
-		preview = nil,
-		message_count = 0,
-	}
-
-	for i = 2, #lines do
-		local line = lines[i]
-		-- Check the JSONL record type before decoding data that the picker does not need.
-		if line:find('"type":"message"', 1, true) then
-			info.message_count = info.message_count + 1
-			if info.preview == nil and line:find('"role":"user"', 1, true) then
-				local entry = decode(line)
-				if entry and entry.message and entry.message.role == "user" then
-					info.preview = preview_from(entry.message)
-				end
-			end
-		elseif line:find('"type":"session_info"', 1, true) then
-			local entry = decode(line)
-			if entry and entry.type == "session_info" then
-				info.name = entry.name
-			end
-		end
-	end
-
-	return info
-end
-
----@return table[]
-function M.list_dir(dir)
-	local sessions = {}
-	if not vim.uv.fs_stat(dir) then
-		return sessions
-	end
-	for name, kind in vim.fs.dir(dir) do
-		if kind == "file" and name:match("%.jsonl$") then
-			local path = vim.fs.joinpath(dir, name)
-			local file = io.open(path, "r")
-			if file then
-				local content = file:read("*a")
-				file:close()
-				local info = M.parse_lines(vim.split(content, "\n", { plain = true, trimempty = true }))
-				if info then
-					local stat = vim.uv.fs_stat(path)
-					info.path = path
-					info.mtime = stat and stat.mtime.sec or 0
-					sessions[#sessions + 1] = info
-				end
-			end
-		end
-	end
-	table.sort(sessions, function(a, b)
-		return a.mtime > b.mtime
 	end)
-	return sessions
+	client.get_messages(function(success, data)
+		if not success then
+			vim.notify("[pim] failed to load history: " .. tostring(data), vim.log.levels.ERROR)
+		elseif type(data) ~= "table" or type(data.messages) ~= "table" then
+			vim.notify("[pim] pi did not return history data", vim.log.levels.WARN)
+		else
+			---@cast data PimRpcMessagesResponse
+			require("pim.events").load_messages(data.messages)
+		end
+	end)
+	require("pim.completion").refresh_commands()
 end
 
-function M.list(cwd)
-	return M.list_dir(M.dir_for(cwd or vim.uv.cwd()))
+function M.new()
+	if not can_change() then
+		return
+	end
+	require("pim.rpc.client").new_session(function(success, data)
+		if valid_response("new_session", success, data) then
+			M.refresh()
+		end
+	end)
+end
+
+---@param path string
+function M.switch(path)
+	if not can_change() then
+		return
+	end
+	require("pim.rpc.client").switch_session(path, function(success, data)
+		if valid_response("switch_session", success, data) then
+			M.refresh()
+		end
+	end)
+end
+
+---@param entry_id string
+function M.fork(entry_id)
+	if not can_change() then
+		return
+	end
+	require("pim.rpc.client").fork(entry_id, function(success, data)
+		if not valid_response("fork", success, data) then
+			return
+		end
+		if type(data.text) ~= "string" then
+			vim.notify("[pim] fork returned invalid data", vim.log.levels.WARN)
+			return
+		end
+		---@cast data PimRpcForkResponse
+		require("pim.ui.input").replace(data.text)
+		M.refresh()
+	end)
+end
+
+function M.clone()
+	if not can_change() then
+		return
+	end
+	require("pim.rpc.client").clone(function(success, data)
+		if not valid_response("clone", success, data) then
+			return
+		end
+		require("pim.ui.input").replace("")
+		M.refresh()
+	end)
 end
 
 return M

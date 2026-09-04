@@ -164,6 +164,30 @@ function M.replace(text)
 	end
 end
 
+---@param messages string[]
+function M.restore_queued(messages)
+	if #messages == 0 then
+		return
+	end
+
+	for _, text in ipairs(messages) do
+		history[#history + 1] = text
+	end
+	nav_index, draft = nil, nil
+
+	local buf = layout.input_buf()
+	if not buf then
+		return
+	end
+	if get_text(buf) == "" then
+		set_text(buf, messages[1])
+		resize()
+		return
+	end
+
+	vim.notify("[pim] Kept the current draft. Press <Up> to recall cleared queued prompts.", vim.log.levels.INFO)
+end
+
 ---@param value boolean
 function M.set_locked(value)
 	locked = value
@@ -180,6 +204,7 @@ end
 function M.reset()
 	history = {}
 	nav_index, draft = nil, nil
+	attached = {}
 	M.set_locked(false)
 end
 

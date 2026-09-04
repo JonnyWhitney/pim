@@ -9,7 +9,7 @@ Markdown Treesitter, and the pi RPC interface.
 ## Requirements
 
 - Neovim nightly. Other Neovim releases are not supported.
-- The `pi` command on `$PATH`, or a `pi_cmd` setting that identifies pi.
+- Pi 0.84.4 or newer. Put `pi` on `$PATH`, or set `pi_cmd` to identify it.
 
 ## Install
 
@@ -48,9 +48,10 @@ alias pim='nvim -c PiStart'
 pim reuses an empty initial tab. If you close one pi window, `:PiStart`
 restores that window. It does not create a second pi layout.
 
-`:PiStop` asks for confirmation, then stops pi and closes the pi windows.
-`:PiStop!` does not ask for confirmation. `:PiToggle` hides or shows the
-windows and does not stop pi.
+`:PiStop` asks for confirmation, then stops pi and deletes the pim windows
+and buffers, including the input draft. `:PiStop!` does not ask for
+confirmation. `:PiToggle` hides or shows the windows, keeps the buffers and
+input draft, and does not stop pi.
 
 The session file remains after you close the UI. `:PiStart` resumes that
 session. Unsaved changes can prevent Neovim from closing, as with `:quit`.
@@ -71,7 +72,7 @@ toggle a fold.
 | `:PiStart` | Open the UI. Start pi if it is stopped. |
 | `:PiToggle` | Show or hide the pi windows. |
 | `:PiSend [text]` | Send text. Without text, send the input buffer. |
-| `:PiAbort` | Stop the current agent run. |
+| `:PiAbort` | Clear queued prompts, restore them to input history, and stop the current agent run. |
 | `:PiResume` | Select a session for the current directory. |
 | `:PiTree` | Browse the active session tree. Prompts are disabled while it is open. |
 | `:PiTrust` | Manage project trust for the current working directory. |
@@ -90,6 +91,10 @@ toggle a fold.
 prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
 fork a selected user prompt, and `c` to clone the active branch. In a preview,
 `q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
+
+pim blocks new, switch, fork, and clone session actions while Pi is streaming,
+compacting, running Bash, or retrying. An agent run remains busy until Pi sends
+`agent_settled`, including queued continuations.
 
 ### Project trust
 
@@ -127,6 +132,12 @@ In Insert mode, `<CR>` inserts a new line. pim does not change `Esc`.
 
 If pi rejects a prompt, pim restores the prompt when the input is empty.
 If you enter new text first, press `<Up>` to recall the rejected prompt.
+
+When you abort an agent run, pim first clears queued steering and follow-up
+prompts. It restores the first queued prompt to an empty input buffer and keeps
+each queued prompt as a separate history entry. If the input has a newer draft,
+pim preserves it and adds the queued prompts to history. Bash abort remains
+direct and does not change the agent queue.
 
 ## Shell commands
 
@@ -167,8 +178,7 @@ require("pim").setup({
 })
 ```
 
-Invalid setting values cause an error. Unknown setting keys cause a warning.
-The warning includes a suggested key when one is available.
+Invalid setting values cause an error. Unknown setting keys cause a warning that includes the full key path.
 
 The winbar shows the pi provider, model, thinking level, configuration
 directory, and context usage. Context usage has the form `ctx:12k/100k (12%)`
@@ -205,7 +215,9 @@ This prevents a newer extension from waiting without a response.
 :PiLog                Show pim events and pi messages.
 ```
 
-Use `debug = true` to record every raw JSONL line in `:PiLog`.
+Use `debug = true` to record every raw JSONL line in `:PiLog`. The event log
+remains available after `:PiStop`. pim clears it immediately before it starts
+a new pi process. `:PiNewSession` and `:PiToggle` do not clear it.
 
 - **pi does not start:** Check `pi_cmd`. Keep the tab open and run `:PiRestart`
   after you correct the setting.

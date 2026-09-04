@@ -123,9 +123,11 @@ return {
 		h.ok(rendered:find("Cannot start pi", 1, true), "the transcript explains itself, got: " .. rendered)
 	end,
 
-	["stop closes the pi tab as well as the process"] = function()
+	["stop destroys the pi UI as well as the process"] = function()
 		local guard, pi_tab = start_with_guard_tab()
 		local tabs_before = #vim.api.nvim_list_tabpages()
+		local transcript = assert(layout.transcript_buf())
+		local input = assert(layout.input_buf())
 
 		local prompts = with_answer("Yes", function()
 			require("pim").stop()
@@ -136,6 +138,10 @@ return {
 		h.eq(tabs_before - 1, #vim.api.nvim_list_tabpages(), "the pi tab is gone")
 		h.ok(not vim.api.nvim_tabpage_is_valid(pi_tab), "specifically the pi tab")
 		h.eq(false, layout.is_open())
+		h.eq(nil, layout.transcript_buf(), "the transcript reference was cleared")
+		h.eq(nil, layout.input_buf(), "the input reference was cleared")
+		h.eq(false, vim.api.nvim_buf_is_valid(transcript), "the transcript buffer was deleted")
+		h.eq(false, vim.api.nvim_buf_is_valid(input), "the input buffer was deleted")
 
 		cleanup_guard(guard)
 	end,
@@ -253,6 +259,46 @@ return {
 		cleanup_guard(guard)
 	end,
 
+	["leaving Neovim stops the UI timers before pi shuts down"] = function()
+		local function active_timers()
+			local count = 0
+			vim.uv.walk(function(handle)
+				if handle:get_type() == "timer" and handle:is_active() then
+					count = count + 1
+				end
+			end)
+			return count
+		end
+
+		local guard = start_with_guard_tab()
+		h.wait_until(client.is_running, "fake pi start", 5000)
+		local idle = active_timers()
+		require("pim.state").update({ run_active = true, is_streaming = true })
+		h.wait_until(function()
+			return active_timers() > idle
+		end, "the busy spinner timer", 2000)
+
+		-- Keep pi alive so only the exit hook itself can close the UI timers.
+		local real_stop = client.stop
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.stop = function() end
+		local ok, err = pcall(vim.api.nvim_exec_autocmds, "VimLeavePre", { group = "pim-shutdown" })
+		client.stop = real_stop
+		if not ok then
+			error(err, 0)
+		end
+		local after_hook = active_timers()
+
+		-- A second explicit shutdown closes nothing more when the hook already did the work.
+		statusline.shutdown()
+		require("pim.ui.transcript").shutdown()
+		h.eq(after_hook, active_timers(), "the UI timers are closed by the exit hook")
+		h.ok(after_hook <= idle, "no UI timer survives exit")
+
+		require("pim").stop({ confirm = false })
+		cleanup_guard(guard)
+	end,
+
 	["repeated start/stop cycles accumulate nothing"] = function()
 		local function census()
 			local groups = {}
@@ -285,8 +331,8 @@ return {
 			h.eq(baseline, census(), "state accumulated after cycle " .. cycle)
 		end
 
-		h.eq(1, baseline.shutdown, "one VimLeavePre autocmd, not one per connect")
-		h.eq(2, baseline.pi_buffers, "exactly the transcript and input buffers")
+		h.eq(0, baseline.shutdown, "stop removes the VimLeavePre autocmd")
+		h.eq(0, baseline.pi_buffers, "stop leaves no pim buffers")
 
 		cleanup_guard(guard)
 	end,
@@ -332,6 +378,140 @@ return {
 		local argv = fake_argv()
 		h.ok(not vim.list_contains(argv, "--session"), "no --session flag for a path that no longer exists")
 		h.ok(not vim.list_contains(argv, missing), "and not the stale path either")
+	end,
+
+	["agent abort clears queued prompts before aborting the run"] = function()
+		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "queue" } })
+		require("pim").start()
+		h.wait_until(function()
+			return require("pim.state").get().connected
+		end, "the queued fake pi connection", 5000)
+
+		local sent = {}
+		local real_request = client.request
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.request = function(command_type, params, callback)
+			sent[#sent + 1] = command_type
+			return real_request(command_type, params, callback)
+		end
+		require("pim.state").handle_event({ type = "agent_start" })
+		require("pim.state").handle_event({ type = "agent_end", willRetry = false })
+		require("pim").abort()
+		h.wait_until(function()
+			return sent[#sent] == "abort"
+		end, "clear_queue followed by abort", 5000)
+		client.request = real_request
+
+		h.eq({ "clear_queue", "abort" }, sent)
+		local input_text = table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
+		h.eq("change direction", input_text, "the first queued message returns to input")
+	end,
+
+	["agent abort still runs after clear_queue fails"] = function()
+		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "clearfail" } })
+		require("pim").start()
+		h.wait_until(function()
+			return require("pim.state").get().connected
+		end, "the clear-failure fake pi connection", 5000)
+
+		local sent = {}
+		local notified = {}
+		local real_request, real_notify = client.request, vim.notify
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.request = function(command_type, params, callback)
+			sent[#sent + 1] = command_type
+			return real_request(command_type, params, callback)
+		end
+		vim.notify = function(message, level)
+			notified[#notified + 1] = { message = message, level = level }
+		end
+		require("pim.state").update({ run_active = true, is_streaming = true })
+		require("pim").abort()
+		local ok, err = pcall(function()
+			h.wait_until(function()
+				return sent[#sent] == "abort"
+			end, "abort after clear_queue failure", 5000)
+		end)
+		client.request, vim.notify = real_request, real_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq({ "clear_queue", "abort" }, sent)
+		h.ok(
+			vim.iter(notified):any(function(item)
+				return item.message:find("clear_queue failed", 1, true) ~= nil
+			end),
+			"the failed recovery is reported"
+		)
+	end,
+
+	["runtime cleanup is idempotent and keeps configuration and the event log"] = function()
+		start_and_connect()
+		local log = require("pim.log")
+		local input = require("pim.ui.input")
+		local lifecycle = require("pim.lifecycle")
+		local configured_command = vim.deepcopy(config.get().pi_cmd)
+
+		log.add("*", "keep this process log")
+		input.restore_queued({ "old queued prompt" })
+		input.set_locked(true)
+		require("pim.state").update({ is_streaming = true, bash_running = true, session_name = "old" })
+
+		lifecycle.cleanup()
+		lifecycle.cleanup()
+
+		h.eq(false, client.is_running())
+		h.eq(false, input.is_locked())
+		h.eq(false, require("pim.ui.tree").is_open())
+		h.eq(nil, layout.transcript_buf())
+		h.eq(nil, layout.input_buf())
+		h.eq(false, require("pim.state").get().is_streaming)
+		h.eq(false, require("pim.state").get().bash_running)
+		h.eq(nil, require("pim.state").get().session_name)
+		h.eq(configured_command, config.get().pi_cmd, "cleanup keeps user configuration")
+		h.ok(
+			table.concat(log.lines(), "\n"):find("keep this process log", 1, true),
+			"cleanup keeps the previous process log"
+		)
+
+		layout.open()
+		input.setup()
+		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Up>", true, false, true), "x", false)
+		h.settle(50)
+		h.eq({ "" }, vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "input history was reset")
+		h.eq({ "" }, vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "transcript was reset")
+		h.eq({}, require("pim.completion").omnifunc(0, "/"), "slash-command completion was reset")
+	end,
+
+	["log clears for a new process but not session changes, toggles, or stop"] = function()
+		start_and_connect()
+		local log = require("pim.log")
+		log.add("*", "marker before session actions")
+
+		require("pim.sessions").new()
+		h.wait_until(function()
+			return require("pim.state").get().session_id == "fresh-session"
+		end, "new session refresh", 5000)
+		require("pim").toggle()
+		require("pim").toggle()
+		h.ok(
+			table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
+			"new session and toggle keep the process log"
+		)
+
+		require("pim").restart()
+		h.wait_until(function()
+			return require("pim.state").get().connected
+		end, "restart connection", 5000)
+		h.ok(
+			not table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
+			"restart clears the old process log"
+		)
+
+		log.add("*", "marker before stop")
+		require("pim").stop({ confirm = false })
+		h.ok(table.concat(log.lines(), "\n"):find("marker before stop", 1, true), "stop keeps the process log")
 	end,
 
 	["an intentional stop reports stopped with no exit code"] = function()

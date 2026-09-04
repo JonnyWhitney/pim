@@ -3,28 +3,18 @@ local transcript = require("pim.ui.transcript")
 
 local M = {}
 
----@class PimTreeRow
----@field entry table
----@field id string|nil
----@field line string
-
 ---@class PimTreeView
 ---@field buf integer
 ---@field rows PimTreeRow[]
 ---@field line_by_index table<integer, integer>
 ---@field index_by_line table<integer, integer>
----@field tree table[]
+---@field tree PimSessionTreeNode[]
 ---@field selected_index integer
 ---@field mode "tree"|"preview"
 
 ---@type PimTreeView|nil
 local view = nil
 local opening = false
-
-local function is_busy()
-	local state = require("pim.state").get()
-	return state.is_streaming or state.is_compacting or state.bash_running or state.retrying
-end
 
 local function focus_transcript()
 	local win = layout.transcript_win()
@@ -116,7 +106,7 @@ local function render_preview(messages)
 		transcript.set(
 			"tree-preview-" .. index,
 			"message",
-			require("pim.ui.render").message(message, opts),
+			require("pim.render.message").render(message, opts),
 			{ final = true }
 		)
 	end
@@ -162,7 +152,7 @@ function M.open()
 		focus_transcript()
 		return
 	end
-	if opening or is_busy() then
+	if opening or require("pim.state").is_busy() then
 		if not opening then
 			vim.notify("[pim] Cannot open the tree while pi is busy", vim.log.levels.WARN)
 		end
@@ -180,7 +170,8 @@ function M.open()
 			vim.notify("[pim] pi did not return tree data", vim.log.levels.WARN)
 			return
 		end
-		if is_busy() then
+		---@cast data PimRpcTreeResponse
+		if require("pim.state").is_busy() then
 			vim.notify("[pim] Cannot open the tree while pi is busy", vim.log.levels.WARN)
 			return
 		end
@@ -248,7 +239,7 @@ local function dismiss(refresh)
 	require("pim.ui.input").set_locked(false)
 	layout.focus_input()
 	if refresh then
-		require("pim").refresh()
+		require("pim.sessions").refresh()
 	end
 end
 
@@ -270,7 +261,7 @@ function M.fork_selected()
 	end
 
 	dismiss(false)
-	require("pim").fork(row.id)
+	require("pim.sessions").fork(row.id)
 end
 
 function M.clone()
@@ -279,7 +270,7 @@ function M.clone()
 	end
 
 	dismiss(false)
-	require("pim").clone()
+	require("pim.sessions").clone()
 end
 
 function M.close()

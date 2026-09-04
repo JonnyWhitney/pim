@@ -1,4 +1,8 @@
+local content = require("pim.content")
+
 local M = {}
+
+local PREVIEW_WIDTH = 72
 
 -- Older pi versions do not provide this RPC method. These levels keep the picker usable.
 local FALLBACK_THINKING_LEVELS = { "off", "minimal", "low", "medium", "high", "xhigh" }
@@ -135,16 +139,7 @@ function M.model()
 end
 
 function M.fork()
-	if require("pim.ui.tree").is_open() then
-		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
-		return
-	end
 	local client = require("pim.rpc.client")
-	local state = require("pim.state").get()
-	if state.is_streaming or state.is_compacting or state.bash_running or state.retrying then
-		vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
-		return
-	end
 
 	client.get_fork_messages(function(success, data)
 		if not success then
@@ -159,16 +154,16 @@ function M.fork()
 			vim.notify("[pim] No prompts are available for forking", vim.log.levels.WARN)
 			return
 		end
+		---@cast data PimRpcForkMessagesResponse
 
 		vim.ui.select(data.messages, {
 			prompt = "pi fork from prompt",
 			format_item = function(message)
-				local text = (message.text or ""):gsub("%s+", " ")
-				return text
+				return content.one_line(message.text, PREVIEW_WIDTH)
 			end,
 		}, function(choice)
 			if choice then
-				require("pim").fork(choice.entryId)
+				require("pim.sessions").fork(choice.entryId)
 			end
 		end)
 	end)
@@ -190,18 +185,9 @@ function M.session()
 			return ("%s%s  (%s · %d msgs)"):format(mark(session.id == current_id), label, when, session.message_count)
 		end,
 	}, function(choice)
-		if not choice then
-			return
+		if choice then
+			require("pim.sessions").switch(choice.path)
 		end
-		require("pim.rpc.client").switch_session(choice.path, function(ok, data)
-			if not ok then
-				vim.notify("[pim] switch_session failed: " .. tostring(data), vim.log.levels.ERROR)
-			elseif type(data) == "table" and data.cancelled then
-				vim.notify("[pim] An extension cancelled the session switch", vim.log.levels.WARN)
-			else
-				require("pim").refresh()
-			end
-		end)
 	end)
 end
 

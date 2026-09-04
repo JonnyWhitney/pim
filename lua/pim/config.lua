@@ -96,43 +96,12 @@ local function validate(opts)
 	end
 end
 
--- Compute edit distance so warnings can suggest a close option name.
-local function distance(a, b)
-	local previous = {}
-	for j = 0, #b do
-		previous[j] = j
-	end
-	for i = 1, #a do
-		local current = { [0] = i }
-		for j = 1, #b do
-			local cost = a:sub(i, i) == b:sub(j, j) and 0 or 1
-			current[j] = math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
-		end
-		previous = current
-	end
-	return previous[#b]
-end
-
-local function nearest(key, known)
-	local best, best_distance = nil, math.huge
-	for candidate in pairs(known) do
-		local candidate_distance = distance(key, candidate)
-		if candidate_distance < best_distance then
-			best, best_distance = candidate, candidate_distance
-		end
-	end
-	if best_distance <= math.max(2, math.floor(#key / 3)) then
-		return best
-	end
-	return nil
-end
-
 local function collect_unknown(opts, known, prefix, found)
 	for key, value in pairs(opts) do
 		local path = prefix .. tostring(key)
 		local default = known[key]
 		if default == nil then
-			found[#found + 1] = { path = path, suggestion = nearest(tostring(key), known) }
+			found[#found + 1] = path
 		elseif type(default) == "table" and type(value) == "table" and not vim.islist(default) then
 			collect_unknown(value, default, path .. ".", found)
 		end
@@ -146,15 +115,10 @@ local function warn_unknown(opts)
 		return
 	end
 
-	table.sort(found, function(a, b)
-		return a.path < b.path
-	end)
+	table.sort(found)
 	local lines = { "[pim] ignoring unknown config " .. (#found == 1 and "key:" or "keys:") }
-	for _, entry in ipairs(found) do
-		lines[#lines + 1] = ("  %s%s"):format(
-			entry.path,
-			entry.suggestion and (" — did you mean %q?"):format(entry.suggestion) or ""
-		)
+	for _, path in ipairs(found) do
+		lines[#lines + 1] = "  " .. path
 	end
 	vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
 end
