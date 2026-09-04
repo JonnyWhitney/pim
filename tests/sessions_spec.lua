@@ -80,6 +80,15 @@ return {
 		h.ok(preview:find("…", 1, true), "long preview truncated")
 	end,
 
+	["session preview skips user messages without text"] = function()
+		local info = assert(session_files.parse_lines({
+			'{"type":"session","id":"one","timestamp":"now","cwd":"/tmp"}',
+			'{"type":"message","message":{"role":"user","content":[{"type":"image","mimeType":"image/png"}]}}',
+			'{"type":"message","message":{"role":"user","content":[{"type":"text","text":"later prompt"}]}}',
+		}))
+		h.eq("later prompt", info.preview)
+	end,
+
 	["non-session files are rejected"] = function()
 		h.eq(nil, session_files.parse_lines(read_lines(fixtures .. "/not_a_session.jsonl")))
 		h.eq(nil, session_files.parse_lines({}))

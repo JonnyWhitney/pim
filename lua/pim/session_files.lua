@@ -1,6 +1,8 @@
+local content = require("pim.content")
+
 local M = {}
 
-local PREVIEW_WIDTH = 60
+local PREVIEW_WIDTH = 72
 
 function M.encode_cwd(cwd)
 	return "--" .. cwd:gsub("^/", ""):gsub("/", "-") .. "--"
@@ -17,29 +19,6 @@ local function decode(line)
 		return value
 	end
 	return nil
-end
-
-local function preview_from(message)
-	local content = message.content
-	local text
-	if type(content) == "string" then
-		text = content
-	elseif type(content) == "table" then
-		for _, block in ipairs(content) do
-			if block.type == "text" then
-				text = block.text
-				break
-			end
-		end
-	end
-	if not text then
-		return nil
-	end
-	text = vim.trim(text:gsub("%s+", " "))
-	if vim.fn.strchars(text) > PREVIEW_WIDTH then
-		text = vim.fn.strcharpart(text, 0, PREVIEW_WIDTH - 1) .. "…"
-	end
-	return text
 end
 
 ---@param lines string[]
@@ -70,7 +49,10 @@ function M.parse_lines(lines)
 			if info.preview == nil and line:find('"role":"user"', 1, true) then
 				local entry = decode(line)
 				if entry and entry.message and entry.message.role == "user" then
-					info.preview = preview_from(entry.message)
+					local text = content.first_text(entry.message.content)
+					if text ~= nil then
+						info.preview = content.one_line(text, PREVIEW_WIDTH)
+					end
 				end
 			end
 		elseif line:find('"type":"session_info"', 1, true) then

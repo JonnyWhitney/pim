@@ -1,3 +1,5 @@
+local content = require("pim.content")
+
 local M = {}
 
 local function split_lines(text)
@@ -32,26 +34,6 @@ local function append_quoted(lines, text)
 	for _, line in ipairs(split_lines(text)) do
 		lines[#lines + 1] = line == "" and ">" or ("> " .. line)
 	end
-end
-
-local function content_to_text(content)
-	if type(content) == "string" then
-		return content
-	end
-	if type(content) ~= "table" then
-		return ""
-	end
-	local parts = {}
-	for _, block in ipairs(content) do
-		if block.type == "text" then
-			parts[#parts + 1] = block.text
-		elseif block.type == "image" then
-			parts[#parts + 1] = ("[image: %s]"):format(block.mimeType or "unknown")
-		else
-			parts[#parts + 1] = ("[%s block]"):format(tostring(block.type))
-		end
-	end
-	return table.concat(parts, "\n")
 end
 
 local function format_json(value)
@@ -160,7 +142,7 @@ end
 
 local function render_user(message)
 	local lines = { "### You", "" }
-	append(lines, content_to_text(message.content))
+	append(lines, content.to_text(message.content))
 	return { lines = lines, folds = {} }
 end
 
@@ -288,7 +270,7 @@ local function render_tool_result(message, opts)
 		message,
 		nil,
 		message.isError,
-		content_to_text(message.content)
+		content.to_text(message.content)
 	)
 	if last then
 		folds[#folds + 1] = { first = 0, last = last, kind = "tool" }
@@ -330,7 +312,7 @@ local function render_custom(message)
 		return { lines = {}, folds = {} }
 	end
 	local lines = { ("### %s"):format(message.customType or "extension"), "" }
-	append(lines, content_to_text(message.content))
+	append(lines, content.to_text(message.content))
 	return { lines = lines, folds = {} }
 end
 
@@ -359,7 +341,7 @@ local function result_text(result)
 	end
 	if type(result) == "table" then
 		if result.content then
-			return content_to_text(result.content)
+			return content.to_text(result.content)
 		end
 		if type(result.output) == "string" then
 			return result.output

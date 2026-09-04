@@ -126,6 +126,24 @@ return {
 		h.ok(notified ~= nil and notified:find("model list", 1, true), "the user is told, got: " .. tostring(notified))
 	end,
 
+	["fork picker normalizes and truncates prompt labels"] = function()
+		local original_messages = client.get_fork_messages
+		local prompt = "  Please inspect the session parser\nand update all related tests before running verification  "
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.get_fork_messages = function(callback)
+			callback(true, { messages = { { entryId = "entry-1", text = prompt } } })
+		end
+
+		local label
+		with_select(function(items, opts, on_choice)
+			label = opts.format_item(items[1])
+			on_choice(nil)
+		end, pickers.fork)
+		client.get_fork_messages = original_messages
+
+		h.eq("Please inspect the session parser and update all related tests before r…", label)
+	end,
+
 	["thinking picker sets the level and the event confirms it"] = function()
 		start_fake()
 		state.update({ thinking_level = "medium" })

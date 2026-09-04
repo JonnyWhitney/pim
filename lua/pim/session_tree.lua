@@ -1,28 +1,11 @@
+local content = require("pim.content")
+
 local M = {}
 
 local PREVIEW_WIDTH = 72
 
-local function content_text(content)
-	if type(content) == "string" then
-		return content
-	end
-	if type(content) ~= "table" then
-		return ""
-	end
-	for _, block in ipairs(content) do
-		if block.type == "text" and type(block.text) == "string" then
-			return block.text
-		end
-	end
-	return ""
-end
-
 local function preview(text)
-	text = vim.trim((text or ""):gsub("%s+", " "))
-	if vim.fn.strchars(text) > PREVIEW_WIDTH then
-		return vim.fn.strcharpart(text, 0, PREVIEW_WIDTH - 1) .. "…"
-	end
-	return text
+	return content.one_line(text, PREVIEW_WIDTH)
 end
 
 ---@param entry table
@@ -31,7 +14,7 @@ function M.summary(entry)
 	if entry.type == "message" then
 		local message = entry.message or {}
 		local role = message.role
-		local text = preview(content_text(message.content))
+		local text = preview(content.first_text(message.content))
 		if role == "user" then
 			return "You: " .. (text ~= "" and text or "[empty prompt]")
 		elseif role == "assistant" then

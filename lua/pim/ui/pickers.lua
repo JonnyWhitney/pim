@@ -1,4 +1,8 @@
+local content = require("pim.content")
+
 local M = {}
+
+local PREVIEW_WIDTH = 72
 
 -- Older pi versions do not provide this RPC method. These levels keep the picker usable.
 local FALLBACK_THINKING_LEVELS = { "off", "minimal", "low", "medium", "high", "xhigh" }
@@ -154,8 +158,7 @@ function M.fork()
 		vim.ui.select(data.messages, {
 			prompt = "pi fork from prompt",
 			format_item = function(message)
-				local text = (message.text or ""):gsub("%s+", " ")
-				return text
+				return content.one_line(message.text, PREVIEW_WIDTH)
 			end,
 		}, function(choice)
 			if choice then
