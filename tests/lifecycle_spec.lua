@@ -354,7 +354,8 @@ return {
 			sent[#sent + 1] = command_type
 			return real_request(command_type, params, callback)
 		end
-		require("pim.state").update({ is_streaming = true })
+		require("pim.state").handle_event({ type = "agent_start" })
+		require("pim.state").handle_event({ type = "agent_end", willRetry = false })
 		require("pim").abort()
 		h.wait_until(function()
 			return sent[#sent] == "abort"
@@ -384,7 +385,7 @@ return {
 		vim.notify = function(message, level)
 			notified[#notified + 1] = { message = message, level = level }
 		end
-		require("pim.state").update({ is_streaming = true })
+		require("pim.state").update({ run_active = true, is_streaming = true })
 		require("pim").abort()
 		local ok, err = pcall(function()
 			h.wait_until(function()

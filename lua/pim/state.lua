@@ -11,6 +11,7 @@ M.NONE = setmetatable({}, {
 local function initial()
 	return {
 		connected = false,
+		run_active = false,
 		is_streaming = false,
 		is_compacting = false,
 		bash_running = false,
@@ -45,6 +46,18 @@ function M.get()
 	return state
 end
 
+---@param value table|nil
+---@return boolean
+function M.is_busy(value)
+	value = value or state
+	return value.run_active
+		or value.is_streaming
+		or value.is_compacting
+		or value.bash_running
+		or value.retrying
+		or false
+end
+
 ---@param observer fun(state: table)
 function M.subscribe(observer)
 	observers[#observers + 1] = observer
@@ -73,6 +86,7 @@ end
 function M.apply_rpc_state(rpc)
 	M.update({
 		connected = true,
+		run_active = rpc.isStreaming or false,
 		is_streaming = rpc.isStreaming or false,
 		is_compacting = rpc.isCompacting or false,
 		model = rpc.model or M.NONE,
@@ -97,9 +111,11 @@ end
 function M.handle_event(event)
 	local kind = event.type
 	if kind == "agent_start" then
-		M.update({ is_streaming = true })
+		M.update({ run_active = true, is_streaming = true })
 	elseif kind == "agent_end" then
 		M.update({ is_streaming = false, retrying = event.willRetry or false })
+	elseif kind == "agent_settled" then
+		M.update({ run_active = false, is_streaming = false, is_compacting = false, retrying = false })
 	elseif kind == "compaction_start" then
 		M.update({ is_compacting = true })
 	elseif kind == "compaction_end" then

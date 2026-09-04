@@ -65,7 +65,15 @@ local function connect(extra_args)
 			if not intentional then
 				exit_code = code
 			end
-			state.update({ connected = false, is_streaming = false, stopped = intentional, exit_code = exit_code })
+			state.update({
+				connected = false,
+				run_active = false,
+				is_streaming = false,
+				is_compacting = false,
+				retrying = false,
+				stopped = intentional,
+				exit_code = exit_code,
+			})
 			if not intentional then
 				local detail = #stderr_tail > 0 and ("\n" .. table.concat(stderr_tail, "\n")) or ""
 				vim.notify(
@@ -169,7 +177,23 @@ function M.refresh()
 	require("pim.completion").refresh_commands()
 end
 
+local function can_change_session()
+	if require("pim.ui.tree").is_open() then
+		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
+		return false
+	end
+	if require("pim.state").is_busy() then
+		vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
+		return false
+	end
+	return true
+end
+
 function M.new_session()
+	if not can_change_session() then
+		return
+	end
+
 	require("pim.rpc.client").new_session(function(success, data)
 		if not success then
 			vim.notify("[pim] new_session failed: " .. tostring(data), vim.log.levels.ERROR)
@@ -179,19 +203,6 @@ function M.new_session()
 			M.refresh()
 		end
 	end)
-end
-
-local function can_change_session()
-	if require("pim.ui.tree").is_open() then
-		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
-		return false
-	end
-	local state = require("pim.state").get()
-	if not state.is_streaming and not state.is_compacting and not state.bash_running and not state.retrying then
-		return true
-	end
-	vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
-	return false
 end
 
 ---@param entry_id string
@@ -280,7 +291,7 @@ function M.abort()
 	local state = require("pim.state").get()
 	if state.bash_running then
 		require("pim.bash").abort()
-	elseif state.is_streaming then
+	elseif state.run_active then
 		local client = require("pim.rpc.client")
 		client.clear_queue(function(success, data)
 			if not success then

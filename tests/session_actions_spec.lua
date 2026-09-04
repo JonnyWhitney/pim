@@ -2,6 +2,7 @@ local h = require("helpers")
 local client = require("pim.rpc.client")
 local config = require("pim.config")
 local layout = require("pim.ui.layout")
+local sessions = require("pim.sessions")
 local state = require("pim.state")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
@@ -59,14 +60,70 @@ return {
 		end, "the cloned session and empty input", 5000)
 	end,
 
-	["fork and clone reject busy sessions before sending requests"] = function()
-		state.update({ is_streaming = true })
+	["session switch is rechecked after the picker returns"] = function()
+		local choice = { id = "session-1", path = "/tmp/session-1.jsonl", mtime = 0, message_count = 0 }
+		local choose
+		local switched = 0
+		local real_list = sessions.list
+		local real_switch = client.switch_session
+		local real_select = vim.ui.select
+		local real_notify = vim.notify
+		---@diagnostic disable-next-line: duplicate-set-field
+		sessions.list = function()
+			return { choice }
+		end
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.switch_session = function()
+			switched = switched + 1
+		end
+		vim.ui.select = function(_, _, callback)
+			choose = callback
+		end
+		vim.notify = function() end
 
-		local calls = { fork_messages = 0, clone = 0 }
-		local real_messages, real_clone = client.get_fork_messages, client.clone
+		local ok, err = pcall(function()
+			require("pim.ui.pickers").session()
+			state.handle_event({ type = "agent_start" })
+			state.handle_event({ type = "agent_end", willRetry = false })
+			assert(choose)(choice)
+		end)
+		sessions.list = real_list
+		client.switch_session = real_switch
+		vim.ui.select = real_select
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq(0, switched, "a run started while the picker was open")
+	end,
+
+	["session actions stay blocked after agent_end until agent_settled"] = function()
+		state.handle_event({ type = "agent_start" })
+		state.handle_event({ type = "agent_end", willRetry = false })
+
+		local calls = { new_session = 0, session_list = 0, fork_messages = 0, fork = 0, clone = 0 }
+		local real_new = client.new_session
+		local real_list = sessions.list
+		local real_messages = client.get_fork_messages
+		local real_fork = client.fork
+		local real_clone = client.clone
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.new_session = function()
+			calls.new_session = calls.new_session + 1
+		end
+		---@diagnostic disable-next-line: duplicate-set-field
+		sessions.list = function()
+			calls.session_list = calls.session_list + 1
+			return {}
+		end
 		---@diagnostic disable-next-line: duplicate-set-field
 		client.get_fork_messages = function()
 			calls.fork_messages = calls.fork_messages + 1
+		end
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.fork = function()
+			calls.fork = calls.fork + 1
 		end
 		---@diagnostic disable-next-line: duplicate-set-field
 		client.clone = function()
@@ -80,19 +137,27 @@ return {
 		end
 
 		local ok, err = pcall(function()
+			require("pim").new_session()
+			require("pim.ui.pickers").session()
 			require("pim.ui.pickers").fork()
+			require("pim").fork("entry-1")
 			require("pim").clone()
 		end)
 
-		client.get_fork_messages, client.clone = real_messages, real_clone
+		client.new_session = real_new
+		sessions.list = real_list
+		client.get_fork_messages = real_messages
+		client.fork = real_fork
+		client.clone = real_clone
 		vim.notify = real_notify
 		if not ok then
 			error(err, 0)
 		end
 
-		h.eq({ fork_messages = 0, clone = 0 }, calls)
-		h.eq(2, #notifications)
-		h.ok(notifications[1]:find("while pi is busy", 1, true), "fork explains why it is unavailable")
-		h.ok(notifications[2]:find("while pi is busy", 1, true), "clone explains why it is unavailable")
+		h.eq({ new_session = 0, session_list = 0, fork_messages = 0, fork = 0, clone = 0 }, calls)
+		h.eq(5, #notifications)
+		for _, notification in ipairs(notifications) do
+			h.ok(notification:find("while pi is busy", 1, true), "blocked action explains why it is unavailable")
+		end
 	end,
 }

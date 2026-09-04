@@ -78,6 +78,10 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     preview to the tree. r forks a selected user prompt. c clones the active
     branch. In the tree, <CR> or q restores the active transcript.
 
+    pim blocks new, switch, fork, and clone session actions while pi is
+    streaming, compacting, running Bash, or retrying. An agent run remains
+    busy through queued continuations until pi reports that it settled.
+
 :PiTrust                                                            *:PiTrust*
     Manage project trust for Neovim's current working directory. This command
     works when pi is running or stopped.

@@ -24,6 +24,7 @@ return {
 		})
 		local current = state.get()
 		h.eq(true, current.connected)
+		h.eq(false, current.run_active)
 		---@type { name: string }
 		local model = assert(current.model)
 		h.eq("Model One", model.name)
@@ -127,11 +128,40 @@ return {
 		h.eq(2, seen)
 	end,
 
-	["events toggle streaming, compaction, retry, and session info"] = function()
+	["busy state is derived from each activity field"] = function()
+		h.eq(false, state.is_busy())
+		for _, field in ipairs({ "run_active", "is_streaming", "is_compacting", "bash_running", "retrying" }) do
+			state.reset()
+			state.update({ [field] = true })
+			h.eq(true, state.is_busy(), field .. " makes pi busy")
+		end
+		h.eq(true, state.is_busy({ run_active = true }), "an explicit state value can be queried")
+		h.eq(false, state.is_busy({}), "missing activity fields are idle")
+	end,
+
+	["RPC streaming state initializes the complete run state"] = function()
+		state.apply_rpc_state({ isStreaming = true })
+		h.eq(true, state.get().run_active)
+		h.eq(true, state.get().is_streaming)
+		h.eq(true, state.is_busy())
+	end,
+
+	["events toggle streaming, complete runs, compaction, retry, and session info"] = function()
 		state.handle_event({ type = "agent_start" })
 		h.eq(true, state.get().is_streaming)
+		h.eq(true, state.get().run_active)
 		state.handle_event({ type = "agent_end", willRetry = false })
 		h.eq(false, state.get().is_streaming)
+		h.eq(true, state.get().run_active, "a queued continuation can still follow agent_end")
+		h.eq(true, state.is_busy())
+
+		state.update({ is_streaming = true, is_compacting = true, retrying = true })
+		state.handle_event({ type = "agent_settled" })
+		h.eq(false, state.get().run_active)
+		h.eq(false, state.get().is_streaming)
+		h.eq(false, state.get().is_compacting)
+		h.eq(false, state.get().retrying)
+		h.eq(false, state.is_busy())
 
 		state.handle_event({ type = "compaction_start", reason = "manual" })
 		h.eq(true, state.get().is_compacting)
@@ -221,6 +251,11 @@ return {
 		local unstarted = statusline.build({ connected = false, spawn_error = "not executable", ext_status = {} })
 		h.ok(unstarted:find("failed to start", 1, true), "spawn failure marker")
 		h.ok(not unstarted:find("connecting", 1, true), "no connecting marker after a failed spawn")
+	end,
+
+	["winbar stays active between agent_end and agent_settled"] = function()
+		local bar = statusline.build({ connected = true, run_active = true, ext_status = {} })
+		h.ok(bar:find("⠋", 1, true), "run_active keeps the activity marker visible, got: " .. bar)
 	end,
 
 	["statusline shutdown is idempotent"] = function()

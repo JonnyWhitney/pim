@@ -21,11 +21,6 @@ local M = {}
 local view = nil
 local opening = false
 
-local function is_busy()
-	local state = require("pim.state").get()
-	return state.is_streaming or state.is_compacting or state.bash_running or state.retrying
-end
-
 local function focus_transcript()
 	local win = layout.transcript_win()
 	if win then
@@ -162,7 +157,7 @@ function M.open()
 		focus_transcript()
 		return
 	end
-	if opening or is_busy() then
+	if opening or require("pim.state").is_busy() then
 		if not opening then
 			vim.notify("[pim] Cannot open the tree while pi is busy", vim.log.levels.WARN)
 		end
@@ -180,7 +175,7 @@ function M.open()
 			vim.notify("[pim] pi did not return tree data", vim.log.levels.WARN)
 			return
 		end
-		if is_busy() then
+		if require("pim.state").is_busy() then
 			vim.notify("[pim] Cannot open the tree while pi is busy", vim.log.levels.WARN)
 			return
 		end

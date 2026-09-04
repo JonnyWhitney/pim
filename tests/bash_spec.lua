@@ -139,13 +139,13 @@ return {
 			return real_request(command_type, params, callback)
 		end
 
-		state.update({ bash_running = true, is_streaming = true })
+		state.update({ bash_running = true, run_active = true, is_streaming = true })
 		require("pim").abort()
 		state.update({ bash_running = false })
 		require("pim").abort()
 
 		client.request = real_request
-		state.update({ is_streaming = false })
+		state.update({ run_active = false, is_streaming = false })
 
 		h.eq({ "abort_bash", "clear_queue", "abort" }, sent, "bash stays direct; agent abort clears its queue first")
 	end,
@@ -159,7 +159,7 @@ return {
 			sent[#sent + 1] = command_type
 		end
 
-		state.update({ bash_running = false, is_streaming = false })
+		state.update({ bash_running = false, run_active = false, is_streaming = false })
 		require("pim").abort()
 
 		client.request = real_request

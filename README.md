@@ -92,6 +92,10 @@ prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
 fork a selected user prompt, and `c` to clone the active branch. In a preview,
 `q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
 
+pim blocks new, switch, fork, and clone session actions while Pi is streaming,
+compacting, running Bash, or retrying. An agent run remains busy until Pi sends
+`agent_settled`, including queued continuations.
+
 ### Project trust
 
 `:PiTrust` works when pi is running or stopped. It manages trust for Neovim's
