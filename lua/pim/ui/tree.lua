@@ -106,7 +106,7 @@ local function render_preview(messages)
 		transcript.set(
 			"tree-preview-" .. index,
 			"message",
-			require("pim.ui.render").message(message, opts),
+			require("pim.render.message").render(message, opts),
 			{ final = true }
 		)
 	end

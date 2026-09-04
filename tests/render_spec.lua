@@ -1,5 +1,6 @@
 local h = require("helpers")
-local render = require("pim.ui.render")
+local message_renderer = require("pim.render.message")
+local tool_renderer = require("pim.render.tool")
 
 local function assistant(content, extra)
 	local msg = { role = "assistant", content = content }
@@ -11,13 +12,13 @@ end
 
 return {
 	["user message with plain string content"] = function()
-		local block = render.message({ role = "user", content = "fix the bug\nin foo.ts" })
+		local block = message_renderer.render({ role = "user", content = "fix the bug\nin foo.ts" })
 		h.eq({ "### You", "", "fix the bug", "in foo.ts" }, block.lines)
 		h.eq({}, block.folds)
 	end,
 
 	["user message with content blocks and an image"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "user",
 			content = {
 				{ type = "text", text = "look at this" },
@@ -28,13 +29,13 @@ return {
 	end,
 
 	["assistant text renders as markdown body"] = function()
-		local block = render.message(assistant({ { type = "text", text = "Here is `code`.\n\nDone." } }))
+		local block = message_renderer.render(assistant({ { type = "text", text = "Here is `code`.\n\nDone." } }))
 		h.eq({ "### pi", "", "Here is `code`.", "", "Done." }, block.lines)
 		h.eq({}, block.folds)
 	end,
 
 	["assistant thinking gets a quoted fold"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "thinking", thinking = "step one\nstep two" },
 			{ type = "text", text = "answer" },
 		}))
@@ -43,7 +44,7 @@ return {
 	end,
 
 	["redacted thinking hides the payload"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "thinking", thinking = "secret", redacted = true },
 		}))
 		h.eq({ "### pi", "", "▸ thinking", "> (redacted)" }, block.lines)
@@ -51,7 +52,7 @@ return {
 
 	["assistant toolCall renders complete long arguments in a fold"] = function()
 		local command = string.rep("x", 200)
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "toolCall", id = "t1", name = "bash", arguments = { command = command } },
 		}))
 		h.eq({
@@ -69,7 +70,7 @@ return {
 
 	["assistant toolCall formats nested arguments as readable JSON"] = function()
 		local arguments = { options = { paths = { "a", "b" } } }
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "toolCall", id = "t1", name = "read", arguments = arguments },
 		}))
 		local encoded = table.concat(vim.list_slice(block.lines, 5, #block.lines - 1), "\n")
@@ -84,7 +85,7 @@ return {
 			{ name = "edit", path = "/tmp/edit.lua" },
 			{ name = "write", path = "doc/write.txt" },
 		}) do
-			local block = render.message(assistant({
+			local block = message_renderer.render(assistant({
 				{ type = "toolCall", id = case.name, name = case.name, arguments = { path = case.path } },
 			}))
 			h.eq(("▸ tool(%s): %s"):format(case.name, case.path), block.lines[3])
@@ -92,21 +93,21 @@ return {
 	end,
 
 	["legacy file_path is shown when path is absent"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "toolCall", id = "t1", name = "read", arguments = { file_path = "legacy.lua" } },
 		}))
 		h.eq("▸ tool(read): legacy.lua", block.lines[3])
 	end,
 
 	["multiline bash context uses the first non-empty line"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "toolCall", id = "t1", name = "bash", arguments = { command = "\n  mise test  \n\necho done" } },
 		}))
 		h.eq("▸ tool(bash): mise test … (+1 lines)", block.lines[3])
 	end,
 
 	["assistant toolCall without arguments stays header-only"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "toolCall", id = "t1", name = "noop", arguments = {} },
 		}))
 		h.eq({ "### pi", "", "▸ tool(noop)" }, block.lines)
@@ -114,17 +115,18 @@ return {
 	end,
 
 	["aborted assistant message is marked"] = function()
-		local block = render.message(assistant({ { type = "text", text = "partial" } }, { stopReason = "aborted" }))
+		local block =
+			message_renderer.render(assistant({ { type = "text", text = "partial" } }, { stopReason = "aborted" }))
 		h.eq({ "### pi", "", "partial", "", "*(aborted)*" }, block.lines)
 	end,
 
 	["errored assistant message shows the error"] = function()
-		local block = render.message(assistant({}, { stopReason = "error", errorMessage = "rate limited" }))
+		local block = message_renderer.render(assistant({}, { stopReason = "error", errorMessage = "rate limited" }))
 		h.eq({ "### pi", "", "**error:** rate limited" }, block.lines)
 	end,
 
 	["tool result renders fenced output under a fold"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "toolResult",
 			toolCallId = "t1",
 			toolName = "bash",
@@ -136,7 +138,7 @@ return {
 	end,
 
 	["tool result error is marked in the header"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "toolResult",
 			toolName = "read",
 			isError = true,
@@ -146,7 +148,7 @@ return {
 	end,
 
 	["empty tool result has no fence and no fold"] = function()
-		local block = render.message({ role = "toolResult", toolName = "noop", isError = false, content = {} })
+		local block = message_renderer.render({ role = "toolResult", toolName = "noop", isError = false, content = {} })
 		h.eq({ "▸ result(noop)" }, block.lines)
 		h.eq({}, block.folds)
 	end,
@@ -159,7 +161,7 @@ return {
 			{ name = "bash", arguments = { command = "mise test\necho done" }, context = "mise test … (+1 lines)" },
 		}
 		for _, case in ipairs(cases) do
-			local block = render.message({
+			local block = message_renderer.render({
 				role = "toolResult",
 				toolCallId = case.name,
 				toolName = case.name,
@@ -169,8 +171,26 @@ return {
 		end
 	end,
 
+	["historical and live tool results share one rendering shape"] = function()
+		local arguments = { path = "src/read.lua" }
+		local result = { content = { { type = "text", text = "file contents" } } }
+		local historical = message_renderer.render({
+			role = "toolResult",
+			toolCallId = "t1",
+			toolName = "read",
+			content = result.content,
+		}, { tool_arguments = { t1 = arguments } })
+		local live = tool_renderer.execution({
+			toolName = "read",
+			args = arguments,
+			result = result,
+		})
+
+		h.eq(live, historical)
+	end,
+
 	["tool output containing a fence gets a longer fence"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "toolResult",
 			toolName = "read",
 			isError = false,
@@ -181,7 +201,7 @@ return {
 	end,
 
 	["bash execution shows exit code and truncation"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "make build",
 			output = "boom",
@@ -195,7 +215,7 @@ return {
 	end,
 
 	["newline-terminated output does not gain a blank line in the fence"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "echo hi",
 			output = "hi\n",
@@ -205,7 +225,7 @@ return {
 	end,
 
 	["deliberate blank lines inside output are kept"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "printf",
 			output = "one\n\ntwo\n",
@@ -215,7 +235,7 @@ return {
 	end,
 
 	["cancelled bash execution is marked"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "sleep 100",
 			output = "",
@@ -225,35 +245,41 @@ return {
 	end,
 
 	["custom message with display=false renders nothing"] = function()
-		local block = render.message({ role = "custom", customType = "hook", content = "hidden", display = false })
+		local block =
+			message_renderer.render({ role = "custom", customType = "hook", content = "hidden", display = false })
 		h.eq({}, block.lines)
 	end,
 
 	["custom message with display=true renders under its type"] = function()
-		local block =
-			render.message({ role = "custom", customType = "notes", content = "remember this", display = true })
+		local block = message_renderer.render({
+			role = "custom",
+			customType = "notes",
+			content = "remember this",
+			display = true,
+		})
 		h.eq({ "### notes", "", "remember this" }, block.lines)
 	end,
 
 	["branch summary folds its quote"] = function()
-		local block = render.message({ role = "branchSummary", summary = "tried X\nit failed", fromId = "abc" })
+		local block =
+			message_renderer.render({ role = "branchSummary", summary = "tried X\nit failed", fromId = "abc" })
 		h.eq({ "▸ branch summary", "> tried X", "> it failed" }, block.lines)
 		h.eq({ { first = 0, last = 2, kind = "summary" } }, block.folds)
 	end,
 
 	["compaction summary shows token count"] = function()
-		local block = render.message({ role = "compactionSummary", summary = "history", tokensBefore = 52000 })
+		local block = message_renderer.render({ role = "compactionSummary", summary = "history", tokensBefore = 52000 })
 		h.eq({ "▸ compacted (52000 tokens before)", "> history" }, block.lines)
 		h.eq({ { first = 0, last = 1, kind = "summary" } }, block.folds)
 	end,
 
 	["unknown role renders a visible stub"] = function()
-		local block = render.message({ role = "notification" })
+		local block = message_renderer.render({ role = "notification" })
 		h.eq({ "▸ notification message" }, block.lines)
 	end,
 
 	["an unknown assistant content block renders a stub, not a blank"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "text", text = "before" },
 			{ type = "redactedThinking", data = "opaque" },
 			{ type = "text", text = "after" },
@@ -262,12 +288,12 @@ return {
 	end,
 
 	["an unknown assistant block on its own still renders"] = function()
-		local block = render.message(assistant({ { type = "serverToolUse", name = "web_search" } }))
+		local block = message_renderer.render(assistant({ { type = "serverToolUse", name = "web_search" } }))
 		h.eq({ "### pi", "", "▸ serverToolUse block" }, block.lines)
 	end,
 
 	["an unknown block in content_to_text renders a stub"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "user",
 			content = {
 				{ type = "text", text = "hi" },
@@ -278,7 +304,7 @@ return {
 	end,
 
 	["empty thinking blocks are not rendered"] = function()
-		local block = render.message(assistant({
+		local block = message_renderer.render(assistant({
 			{ type = "thinking", thinking = "  " },
 			{ type = "text", text = "answer" },
 		}))
@@ -287,7 +313,7 @@ return {
 	end,
 
 	["hidden thinking is omitted entirely"] = function()
-		local block = render.message(
+		local block = message_renderer.render(
 			assistant({ { type = "thinking", thinking = "hmm" }, { type = "text", text = "answer" } }),
 			{ thinking = "hidden" }
 		)
@@ -296,7 +322,7 @@ return {
 	end,
 
 	["running tool execution shows status and streamed output"] = function()
-		local block = render.tool_execution({
+		local block = tool_renderer.execution({
 			toolName = "bash",
 			running = true,
 			result = { content = { { type = "text", text = "file-a" } } },
@@ -306,7 +332,7 @@ return {
 	end,
 
 	["pending edit execution shows its preview"] = function()
-		local block = render.tool_execution({
+		local block = tool_renderer.execution({
 			toolName = "edit",
 			args = { path = "src/config.lua" },
 			preview = "@@ -1 +1 @@\n-old\n+new",
@@ -319,7 +345,7 @@ return {
 	end,
 
 	["finished edit execution uses the authoritative result diff"] = function()
-		local block = render.tool_execution({
+		local block = tool_renderer.execution({
 			toolName = "edit",
 			args = { path = "src/config.lua" },
 			preview = "preview",
@@ -329,7 +355,7 @@ return {
 	end,
 
 	["write execution uses the target filetype for proposed content"] = function()
-		local block = render.tool_execution({
+		local block = tool_renderer.execution({
 			toolName = "write",
 			args = { path = "new.lua", content = "local first = true\nreturn first" },
 			result = { content = { { type = "text", text = "written" } } },
@@ -344,7 +370,7 @@ return {
 	end,
 
 	["pending bash execution shows the complete command"] = function()
-		local block = render.tool_execution({
+		local block = tool_renderer.execution({
 			toolName = "bash",
 			args = { command = "mise test\necho done" },
 			preview = "mise test\necho done",
@@ -360,7 +386,7 @@ return {
 	end,
 
 	["finished bash execution keeps the command and output separate"] = function()
-		local block = render.tool_execution({
+		local block = tool_renderer.execution({
 			toolName = "bash",
 			args = { command = "echo done" },
 			preview = "echo done",
@@ -370,26 +396,29 @@ return {
 	end,
 
 	["finished tool execution drops the running marker"] = function()
-		local block = render.tool_execution({ toolName = "bash", result = "done" })
+		local block = tool_renderer.execution({ toolName = "bash", result = "done" })
 		h.eq("▸ result(bash)", block.lines[1])
 	end,
 
 	["failed tool execution is marked"] = function()
-		local block = render.tool_execution({ toolName = "bash", isError = true, result = "boom" })
+		local block = tool_renderer.execution({ toolName = "bash", isError = true, result = "boom" })
 		h.eq("▸ result(bash) ✘ error", block.lines[1])
 	end,
 
 	["tool execution with no output has no fence"] = function()
-		local block = render.tool_execution({ toolName = "noop", running = true })
+		local block = tool_renderer.execution({ toolName = "noop", running = true })
 		h.eq({ "▸ result(noop) [running]" }, block.lines)
 		h.eq({}, block.folds)
 	end,
 
 	["tool execution tolerates ad-hoc result shapes"] = function()
-		h.eq({ "▸ result(t)", "```", "raw", "```" }, render.tool_execution({ toolName = "t", result = "raw" }).lines)
+		h.eq(
+			{ "▸ result(t)", "```", "raw", "```" },
+			tool_renderer.execution({ toolName = "t", result = "raw" }).lines
+		)
 		h.eq(
 			{ "▸ result(t)", "```", "out", "```" },
-			render.tool_execution({ toolName = "t", result = { output = "out" } }).lines
+			tool_renderer.execution({ toolName = "t", result = { output = "out" } }).lines
 		)
 	end,
 }

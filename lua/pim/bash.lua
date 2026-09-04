@@ -27,7 +27,7 @@ local function show(key, message, final)
 	require("pim.ui.transcript").set(
 		key,
 		"bash",
-		require("pim.ui.render").message(message),
+		require("pim.render.message").render(message),
 		final and { final = true } or nil
 	)
 end

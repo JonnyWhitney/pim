@@ -3,7 +3,7 @@ local bash = require("pim.bash")
 local client = require("pim.rpc.client")
 local config = require("pim.config")
 local layout = require("pim.ui.layout")
-local render = require("pim.ui.render")
+local message_renderer = require("pim.render.message")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
@@ -56,7 +56,7 @@ return {
 	end,
 
 	["a running command renders before its result arrives"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "sleep 5",
 			running = true,
@@ -65,7 +65,7 @@ return {
 	end,
 
 	["excluded output is marked as such"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "cat secrets",
 			output = "hunter2",
@@ -76,7 +76,7 @@ return {
 	end,
 
 	["a failing excluded command shows both markers"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "make",
 			output = "",
@@ -87,7 +87,7 @@ return {
 	end,
 
 	["a rejected bash command renders as an error"] = function()
-		local block = render.message({
+		local block = message_renderer.render({
 			role = "bashExecution",
 			command = "ls",
 			failed = true,

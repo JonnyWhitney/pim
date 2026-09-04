@@ -1,5 +1,6 @@
 local log = require("pim.log")
-local render = require("pim.ui.render")
+local message_renderer = require("pim.render.message")
+local tool_renderer = require("pim.render.tool")
 local tool_preview = require("pim.tool_preview")
 local state = require("pim.state")
 local transcript = require("pim.ui.transcript")
@@ -74,7 +75,7 @@ end
 ---@param message PimMessage
 ---@param opts { final: boolean|nil }|nil
 local function set_message(key, message, opts)
-	local ok, rendered = pcall(render.message, message, render_opts())
+	local ok, rendered = pcall(message_renderer.render, message, render_opts())
 	if not ok then
 		log.add("!", "Cannot render message event: " .. tostring(rendered))
 		return
@@ -224,7 +225,7 @@ function M.handle(event)
 		transcript.set(
 			"tool-" .. event.toolCallId,
 			"tool",
-			render.tool_execution({
+			tool_renderer.execution({
 				toolName = event.toolName,
 				args = arguments,
 				preview = event_preview(event, arguments),
@@ -236,7 +237,7 @@ function M.handle(event)
 		transcript.set(
 			"tool-" .. event.toolCallId,
 			"tool",
-			render.tool_execution({
+			tool_renderer.execution({
 				toolName = event.toolName,
 				args = arguments,
 				preview = event_preview(event, arguments),
@@ -249,7 +250,7 @@ function M.handle(event)
 		transcript.set(
 			"tool-" .. event.toolCallId,
 			"tool",
-			render.tool_execution({
+			tool_renderer.execution({
 				toolName = event.toolName,
 				args = arguments,
 				preview = event_preview(event, arguments),
@@ -274,7 +275,7 @@ function M.load_messages(messages)
 	transcript.reset()
 	for _, message in ipairs(messages or {}) do
 		remember_tool_calls(message)
-		transcript.set(next_key(), "message", render.message(message, render_opts()), { final = true })
+		transcript.set(next_key(), "message", message_renderer.render(message, render_opts()), { final = true })
 	end
 end
 
