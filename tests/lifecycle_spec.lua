@@ -449,7 +449,7 @@ return {
 		local log = require("pim.log")
 		log.add("*", "marker before session actions")
 
-		require("pim").new_session()
+		require("pim.sessions").new()
 		h.wait_until(function()
 			return require("pim.state").get().session_id == "fresh-session"
 		end, "new session refresh", 5000)

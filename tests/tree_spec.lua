@@ -117,7 +117,7 @@ return {
 			notified = message
 		end
 
-		local ok, err = pcall(require("pim").clone)
+		local ok, err = pcall(require("pim.sessions").clone)
 		client.clone = real_clone
 		vim.notify = real_notify
 		if not ok then

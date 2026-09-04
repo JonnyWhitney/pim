@@ -120,7 +120,7 @@ function M.start()
 	end
 
 	if connect() then
-		M.refresh()
+		require("pim.sessions").refresh()
 	end
 end
 
@@ -137,7 +137,7 @@ function M.restart()
 	end
 
 	if connect(extra_args) then
-		M.refresh()
+		require("pim.sessions").refresh()
 	end
 end
 
@@ -148,98 +148,6 @@ function M.toggle()
 	else
 		M.start()
 	end
-end
-
-function M.refresh()
-	local client = require("pim.rpc.client")
-	local events = require("pim.events")
-	local state = require("pim.state")
-
-	client.get_state(function(success, data)
-		if not success then
-			vim.notify("[pim] get_state failed: " .. tostring(data), vim.log.levels.ERROR)
-		elseif type(data) ~= "table" then
-			vim.notify("[pim] pi did not return state data", vim.log.levels.WARN)
-		else
-			state.apply_rpc_state(data)
-			state.poll_stats()
-		end
-	end)
-	client.get_messages(function(success, data)
-		if not success then
-			vim.notify("[pim] failed to load history: " .. tostring(data), vim.log.levels.ERROR)
-		elseif type(data) ~= "table" then
-			vim.notify("[pim] pi did not return history data", vim.log.levels.WARN)
-		else
-			events.load_messages(data.messages)
-		end
-	end)
-	require("pim.completion").refresh_commands()
-end
-
-local function can_change_session()
-	if require("pim.ui.tree").is_open() then
-		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
-		return false
-	end
-	if require("pim.state").is_busy() then
-		vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
-		return false
-	end
-	return true
-end
-
-function M.new_session()
-	if not can_change_session() then
-		return
-	end
-
-	require("pim.rpc.client").new_session(function(success, data)
-		if not success then
-			vim.notify("[pim] new_session failed: " .. tostring(data), vim.log.levels.ERROR)
-		elseif type(data) == "table" and data.cancelled then
-			vim.notify("[pim] new session cancelled by an extension", vim.log.levels.WARN)
-		else
-			M.refresh()
-		end
-	end)
-end
-
----@param entry_id string
-function M.fork(entry_id)
-	if not can_change_session() then
-		return
-	end
-
-	require("pim.rpc.client").fork(entry_id, function(success, data)
-		if not success then
-			vim.notify("[pim] fork failed: " .. tostring(data), vim.log.levels.ERROR)
-		elseif type(data) == "table" and data.cancelled then
-			vim.notify("[pim] fork cancelled by an extension", vim.log.levels.WARN)
-		elseif type(data) ~= "table" or type(data.text) ~= "string" then
-			vim.notify("[pim] pi did not return the forked prompt", vim.log.levels.WARN)
-		else
-			require("pim.ui.input").replace(data.text)
-			M.refresh()
-		end
-	end)
-end
-
-function M.clone()
-	if not can_change_session() then
-		return
-	end
-
-	require("pim.rpc.client").clone(function(success, data)
-		if not success then
-			vim.notify("[pim] clone failed: " .. tostring(data), vim.log.levels.ERROR)
-		elseif type(data) == "table" and data.cancelled then
-			vim.notify("[pim] clone cancelled by an extension", vim.log.levels.WARN)
-		else
-			require("pim.ui.input").replace("")
-			M.refresh()
-		end
-	end)
 end
 
 local function teardown()

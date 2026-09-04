@@ -7,18 +7,6 @@ local function mark(is_current)
 	return is_current and "● " or "  "
 end
 
-local function can_change_session()
-	if require("pim.ui.tree").is_open() then
-		vim.notify("[pim] Close the tree before changing the session", vim.log.levels.WARN)
-		return false
-	end
-	if require("pim.state").is_busy() then
-		vim.notify("[pim] Cannot change the session while pi is busy", vim.log.levels.WARN)
-		return false
-	end
-	return true
-end
-
 local function format_trust_decision(project, entry)
 	if not entry then
 		return "none"
@@ -147,9 +135,6 @@ function M.model()
 end
 
 function M.fork()
-	if not can_change_session() then
-		return
-	end
 	local client = require("pim.rpc.client")
 
 	client.get_fork_messages(function(success, data)
@@ -174,16 +159,13 @@ function M.fork()
 			end,
 		}, function(choice)
 			if choice then
-				require("pim").fork(choice.entryId)
+				require("pim.sessions").fork(choice.entryId)
 			end
 		end)
 	end)
 end
 
 function M.session()
-	if not can_change_session() then
-		return
-	end
 	local sessions = require("pim.sessions").list()
 	if #sessions == 0 then
 		vim.notify("[pim] No sessions exist for this directory", vim.log.levels.WARN)
@@ -199,18 +181,9 @@ function M.session()
 			return ("%s%s  (%s · %d msgs)"):format(mark(session.id == current_id), label, when, session.message_count)
 		end,
 	}, function(choice)
-		if not choice or not can_change_session() then
-			return
+		if choice then
+			require("pim.sessions").switch(choice.path)
 		end
-		require("pim.rpc.client").switch_session(choice.path, function(ok, data)
-			if not ok then
-				vim.notify("[pim] switch_session failed: " .. tostring(data), vim.log.levels.ERROR)
-			elseif type(data) == "table" and data.cancelled then
-				vim.notify("[pim] An extension cancelled the session switch", vim.log.levels.WARN)
-			else
-				require("pim").refresh()
-			end
-		end)
 	end)
 end
 

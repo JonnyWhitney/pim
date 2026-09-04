@@ -243,7 +243,7 @@ local function dismiss(refresh)
 	require("pim.ui.input").set_locked(false)
 	layout.focus_input()
 	if refresh then
-		require("pim").refresh()
+		require("pim.sessions").refresh()
 	end
 end
 
@@ -265,7 +265,7 @@ function M.fork_selected()
 	end
 
 	dismiss(false)
-	require("pim").fork(row.id)
+	require("pim.sessions").fork(row.id)
 end
 
 function M.clone()
@@ -274,7 +274,7 @@ function M.clone()
 	end
 
 	dismiss(false)
-	require("pim").clone()
+	require("pim.sessions").clone()
 end
 
 function M.close()

@@ -54,10 +54,123 @@ return {
 		start_pim()
 		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "discard this draft" })
 
-		require("pim").clone()
+		sessions.clone()
 		h.wait_until(function()
 			return state.get().session_id == "cloned-session" and input_text() == ""
 		end, "the cloned session and empty input", 5000)
+	end,
+
+	["workflow RPC failures identify their operation and do not refresh"] = function()
+		local cases = {
+			{ action = "new_session", rpc = "new_session", run = sessions.new },
+			{
+				action = "switch_session",
+				rpc = "switch_session",
+				run = function()
+					sessions.switch("/tmp/s")
+				end,
+			},
+			{
+				action = "fork",
+				rpc = "fork",
+				run = function()
+					sessions.fork("entry-1")
+				end,
+			},
+			{ action = "clone", rpc = "clone", run = sessions.clone },
+		}
+		local original_refresh = sessions.refresh
+		local original_notify = vim.notify
+		local refreshes = 0
+		---@diagnostic disable-next-line: duplicate-set-field
+		sessions.refresh = function()
+			refreshes = refreshes + 1
+		end
+
+		local ok, err = pcall(function()
+			for _, case in ipairs(cases) do
+				local original_rpc = client[case.rpc]
+				local notifications = {}
+				client[case.rpc] = function(...)
+					local callback = select(select("#", ...), ...)
+					callback(false, "boom")
+				end
+				vim.notify = function(message, level)
+					notifications[#notifications + 1] = { message = message, level = level }
+				end
+
+				case.run()
+				client[case.rpc] = original_rpc
+
+				h.eq(1, #notifications, case.action .. " reports one error")
+				h.ok(notifications[1].message:find(case.action .. " failed: boom", 1, true))
+				h.eq(vim.log.levels.ERROR, notifications[1].level)
+			end
+		end)
+		sessions.refresh = original_refresh
+		vim.notify = original_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq(0, refreshes)
+	end,
+
+	["workflow responses are validated before refresh"] = function()
+		local cases = {
+			{ action = "new_session", rpc = "new_session", data = nil, run = sessions.new },
+			{
+				action = "switch_session",
+				rpc = "switch_session",
+				data = nil,
+				run = function()
+					sessions.switch("/tmp/s")
+				end,
+			},
+			{
+				action = "fork",
+				rpc = "fork",
+				data = {},
+				run = function()
+					sessions.fork("entry-1")
+				end,
+			},
+			{ action = "clone", rpc = "clone", data = nil, run = sessions.clone },
+		}
+		local original_refresh = sessions.refresh
+		local original_notify = vim.notify
+		local refreshes = 0
+		---@diagnostic disable-next-line: duplicate-set-field
+		sessions.refresh = function()
+			refreshes = refreshes + 1
+		end
+
+		local ok, err = pcall(function()
+			for _, case in ipairs(cases) do
+				local original_rpc = client[case.rpc]
+				local notified
+				client[case.rpc] = function(...)
+					local callback = select(select("#", ...), ...)
+					callback(true, case.data)
+				end
+				vim.notify = function(message, level)
+					notified = { message = message, level = level }
+				end
+
+				case.run()
+				client[case.rpc] = original_rpc
+
+				h.ok(notified.message:find(case.action .. " returned invalid data", 1, true))
+				h.eq(vim.log.levels.WARN, notified.level)
+			end
+		end)
+		sessions.refresh = original_refresh
+		vim.notify = original_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq(0, refreshes)
 	end,
 
 	["session switch is rechecked after the picker returns"] = function()
@@ -102,10 +215,9 @@ return {
 		state.handle_event({ type = "agent_start" })
 		state.handle_event({ type = "agent_end", willRetry = false })
 
-		local calls = { new_session = 0, session_list = 0, fork_messages = 0, fork = 0, clone = 0 }
+		local calls = { new_session = 0, switch_session = 0, fork = 0, clone = 0 }
 		local real_new = client.new_session
-		local real_list = sessions.list
-		local real_messages = client.get_fork_messages
+		local real_switch = client.switch_session
 		local real_fork = client.fork
 		local real_clone = client.clone
 		---@diagnostic disable-next-line: duplicate-set-field
@@ -113,13 +225,8 @@ return {
 			calls.new_session = calls.new_session + 1
 		end
 		---@diagnostic disable-next-line: duplicate-set-field
-		sessions.list = function()
-			calls.session_list = calls.session_list + 1
-			return {}
-		end
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.get_fork_messages = function()
-			calls.fork_messages = calls.fork_messages + 1
+		client.switch_session = function()
+			calls.switch_session = calls.switch_session + 1
 		end
 		---@diagnostic disable-next-line: duplicate-set-field
 		client.fork = function()
@@ -137,16 +244,14 @@ return {
 		end
 
 		local ok, err = pcall(function()
-			require("pim").new_session()
-			require("pim.ui.pickers").session()
-			require("pim.ui.pickers").fork()
-			require("pim").fork("entry-1")
-			require("pim").clone()
+			sessions.new()
+			sessions.switch("/tmp/session.jsonl")
+			sessions.fork("entry-1")
+			sessions.clone()
 		end)
 
 		client.new_session = real_new
-		sessions.list = real_list
-		client.get_fork_messages = real_messages
+		client.switch_session = real_switch
 		client.fork = real_fork
 		client.clone = real_clone
 		vim.notify = real_notify
@@ -154,8 +259,8 @@ return {
 			error(err, 0)
 		end
 
-		h.eq({ new_session = 0, session_list = 0, fork_messages = 0, fork = 0, clone = 0 }, calls)
-		h.eq(5, #notifications)
+		h.eq({ new_session = 0, switch_session = 0, fork = 0, clone = 0 }, calls)
+		h.eq(4, #notifications)
 		for _, notification in ipairs(notifications) do
 			h.ok(notification:find("while pi is busy", 1, true), "blocked action explains why it is unavailable")
 		end
