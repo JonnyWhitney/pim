@@ -34,7 +34,7 @@ local function format_tokens(tokens)
 	return ("%.1f%s"):format(scaled, suffix)
 end
 
----@param state table
+---@param state PimApplicationState
 ---@return string
 function M.build(state)
 	local model = state.model or {}
@@ -128,6 +128,7 @@ local function start_spinner()
 	end)
 end
 
+---@param state PimApplicationState
 local function on_state_changed(state)
 	if state_store.is_busy(state) then
 		start_spinner()

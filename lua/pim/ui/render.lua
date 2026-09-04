@@ -353,8 +353,8 @@ local function result_text(result)
 	return vim.inspect(result)
 end
 
----@param exec { toolName: string, args: table|nil, preview: string|nil, running: boolean|nil, isError: boolean|nil, result: any }
----@return { lines: string[], folds: table[] }
+---@param exec PimToolExecution
+---@return PimRenderedBlock
 function M.tool_execution(exec)
 	local status = ""
 	if exec.running then
@@ -390,9 +390,9 @@ local renderers = {
 	compactionSummary = render_compaction_summary,
 }
 
----@param message table
+---@param message PimMessage
 ---@param opts { thinking: "folded"|"open"|"hidden"|nil, tool_arguments: table<string, table>|nil }|nil
----@return { lines: string[], folds: { first: integer, last: integer, kind: string }[] }
+---@return PimRenderedBlock
 function M.message(message, opts)
 	local renderer = message and renderers[message.role]
 	if not renderer then

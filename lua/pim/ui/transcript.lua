@@ -6,7 +6,9 @@ local ns = vim.api.nvim_create_namespace("pim-transcript")
 local queue_ns = vim.api.nvim_create_namespace("pim-queue")
 local FLUSH_DELAY_MS = 50
 
+---@type PimTranscriptBlock[]
 local blocks = {}
+---@type table<string, PimTranscriptBlock>
 local by_key = {}
 local dirty = {}
 local divider_count = 0
@@ -165,7 +167,7 @@ end
 
 ---@param key string
 ---@param kind string
----@param rendered { lines: string[], folds: table[] }
+---@param rendered PimRenderedBlock
 ---@param opts { final: boolean|nil }|nil
 function M.set(key, kind, rendered, opts)
 	if #rendered.lines == 0 then
@@ -173,7 +175,7 @@ function M.set(key, kind, rendered, opts)
 	end
 	local block = by_key[key]
 	if not block then
-		block = { key = key, kind = kind, mark = nil, final = false }
+		block = { key = key, kind = kind, lines = {}, folds = {}, mark = nil, final = false }
 		blocks[#blocks + 1] = block
 		by_key[key] = block
 	end

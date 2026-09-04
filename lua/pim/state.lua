@@ -8,6 +8,7 @@ M.NONE = setmetatable({}, {
 	end,
 })
 
+---@return PimApplicationState
 local function initial()
 	return {
 		connected = false,
@@ -33,7 +34,9 @@ local function initial()
 	}
 end
 
+---@type PimApplicationState
 local state = initial()
+---@type fun(state: PimApplicationState)[]
 local observers = {}
 
 local function notify()
@@ -42,11 +45,12 @@ local function notify()
 	end
 end
 
+---@return PimApplicationState
 function M.get()
 	return state
 end
 
----@param value table|nil
+---@param value PimBusyState|nil
 ---@return boolean
 function M.is_busy(value)
 	value = value or state
@@ -58,7 +62,7 @@ function M.is_busy(value)
 		or false
 end
 
----@param observer fun(state: table)
+---@param observer fun(state: PimApplicationState)
 function M.subscribe(observer)
 	observers[#observers + 1] = observer
 end
@@ -83,6 +87,7 @@ function M.reset_observers()
 	observers = {}
 end
 
+---@param rpc PimRpcState
 function M.apply_rpc_state(rpc)
 	M.update({
 		connected = true,
@@ -107,7 +112,7 @@ function M.set_ext_widget(key, lines)
 	notify()
 end
 
----@param event table
+---@param event PimEvent
 function M.handle_event(event)
 	local kind = event.type
 	if kind == "agent_start" then
@@ -144,11 +149,13 @@ function M.poll_stats()
 		if not success or type(stats) ~= "table" then
 			return
 		end
+		---@cast stats PimRpcSessionStats
 		local usage = stats.contextUsage
 		local has_context = type(usage) == "table"
 			and type(usage.tokens) == "number"
 			and type(usage.contextWindow) == "number"
 			and type(usage.percent) == "number"
+		---@cast usage PimRpcContextUsage
 		M.update({
 			context_tokens = has_context and usage.tokens or M.NONE,
 			context_window = has_context and usage.contextWindow or M.NONE,

@@ -178,11 +178,14 @@ function M.stop(opts)
 	end)
 end
 
+---@param data any
+---@return string[]|nil
 local function queued_messages(data)
 	if type(data) ~= "table" or type(data.steering) ~= "table" or type(data.followUp) ~= "table" then
 		return nil
 	end
 
+	---@cast data PimRpcQueueResponse
 	local messages = {}
 	for _, queue in ipairs({ data.steering, data.followUp }) do
 		for _, text in ipairs(queue) do

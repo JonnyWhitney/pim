@@ -79,6 +79,7 @@ local function start_deadline(id, entry, timeout_ms)
 	return timer
 end
 
+---@param message PimRpcResponse
 local function handle_response(message)
 	local entry
 	if message.id then
@@ -118,7 +119,7 @@ local function on_line(line)
 	end
 end
 
----@param opts { on_event: fun(event: table)|nil, on_ui_request: fun(request: table)|nil, on_exit: fun(code: integer, intentional: boolean, stderr_tail: string[])|nil, cwd: string|nil, extra_args: string[]|nil, request_timeout_ms: integer|nil }|nil
+---@param opts { on_event: fun(event: PimEvent)|nil, on_ui_request: fun(request: table)|nil, on_exit: fun(code: integer, intentional: boolean, stderr_tail: string[])|nil, cwd: string|nil, extra_args: string[]|nil, request_timeout_ms: integer|nil }|nil
 ---@return boolean
 ---@return string|nil
 function M.start(opts)
@@ -252,10 +253,12 @@ function M.respond_ui(id, payload)
 	active.write(line)
 end
 
+---@param callback fun(success: boolean, payload: any)
 function M.get_state(callback)
 	M.request("get_state", nil, callback)
 end
 
+---@param callback fun(success: boolean, payload: any)
 function M.get_messages(callback)
 	M.request("get_messages", nil, callback)
 end
@@ -264,6 +267,7 @@ function M.get_commands(callback)
 	M.request("get_commands", nil, callback)
 end
 
+---@param callback fun(success: boolean, payload: any)
 function M.clear_queue(callback)
 	M.request("clear_queue", nil, callback)
 end
@@ -307,10 +311,12 @@ function M.new_session(callback)
 	M.request("new_session", nil, callback)
 end
 
+---@param callback fun(success: boolean, payload: any)
 function M.get_fork_messages(callback)
 	M.request("get_fork_messages", nil, callback)
 end
 
+---@param callback fun(success: boolean, payload: any)
 function M.get_tree(callback)
 	M.request("get_tree", nil, callback)
 end

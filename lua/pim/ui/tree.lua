@@ -3,17 +3,12 @@ local transcript = require("pim.ui.transcript")
 
 local M = {}
 
----@class PimTreeRow
----@field entry table
----@field id string|nil
----@field line string
-
 ---@class PimTreeView
 ---@field buf integer
 ---@field rows PimTreeRow[]
 ---@field line_by_index table<integer, integer>
 ---@field index_by_line table<integer, integer>
----@field tree table[]
+---@field tree PimSessionTreeNode[]
 ---@field selected_index integer
 ---@field mode "tree"|"preview"
 
@@ -175,6 +170,7 @@ function M.open()
 			vim.notify("[pim] pi did not return tree data", vim.log.levels.WARN)
 			return
 		end
+		---@cast data PimRpcTreeResponse
 		if require("pim.state").is_busy() then
 			vim.notify("[pim] Cannot open the tree while pi is busy", vim.log.levels.WARN)
 			return

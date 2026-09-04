@@ -14,7 +14,7 @@ local TOOL_EVENTS = {
 
 local message_counter = 0
 local current_key = nil
----@type table|nil
+---@type PimMessage|nil
 local current_message = nil
 local tool_argument_json = {}
 local tool_arguments = {}
@@ -27,11 +27,16 @@ local function render_opts()
 	}
 end
 
+---@param message PimMessage|nil
 local function remember_tool_calls(message)
-	if type(message) ~= "table" or message.role ~= "assistant" or type(message.content) ~= "table" then
+	if type(message) ~= "table" then
 		return
 	end
-	for _, block in ipairs(message.content) do
+	local blocks = message.content
+	if message.role ~= "assistant" or type(blocks) ~= "table" then
+		return
+	end
+	for _, block in ipairs(blocks) do
 		if
 			type(block) == "table"
 			and block.type == "toolCall"
@@ -43,6 +48,7 @@ local function remember_tool_calls(message)
 	end
 end
 
+---@param event PimEvent
 local function event_arguments(event)
 	if type(event.args) == "table" then
 		tool_arguments[event.toolCallId] = event.args
@@ -50,6 +56,8 @@ local function event_arguments(event)
 	return event.args or tool_arguments[event.toolCallId]
 end
 
+---@param event PimEvent
+---@param arguments table|nil
 local function event_preview(event, arguments)
 	if tool_previews[event.toolCallId] == nil then
 		tool_previews[event.toolCallId] = tool_preview.generate(event.toolName, arguments)
@@ -62,6 +70,9 @@ local function next_key()
 	return ("msg-%d"):format(message_counter)
 end
 
+---@param key string
+---@param message PimMessage
+---@param opts { final: boolean|nil }|nil
 local function set_message(key, message, opts)
 	local ok, rendered = pcall(render.message, message, render_opts())
 	if not ok then
@@ -71,7 +82,7 @@ local function set_message(key, message, opts)
 	transcript.set(key, "message", rendered, opts)
 end
 
----@return table|nil, integer|nil
+---@return PimContentBlock|nil, integer|nil
 local function content_block(update, block_type, field)
 	if type(current_message) ~= "table" or current_message.role ~= "assistant" then
 		return nil
@@ -164,7 +175,7 @@ function M.reset()
 	tool_previews = {}
 end
 
----@param event table
+---@param event PimEvent
 function M.handle(event)
 	state.handle_event(event)
 
@@ -257,7 +268,7 @@ function M.handle(event)
 	end
 end
 
----@param messages table[]|nil
+---@param messages PimMessage[]|nil
 function M.load_messages(messages)
 	M.reset()
 	transcript.reset()

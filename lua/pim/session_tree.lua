@@ -8,7 +8,7 @@ local function preview(text)
 	return content.one_line(text, PREVIEW_WIDTH)
 end
 
----@param entry table
+---@param entry PimSessionEntry
 ---@return string
 function M.summary(entry)
 	if entry.type == "message" then
@@ -47,9 +47,9 @@ function M.summary(entry)
 	return entry.type or "unknown entry"
 end
 
----@param tree table[]
+---@param tree PimSessionTreeNode[]
 ---@param leaf_id string|nil
----@return table[]
+---@return PimTreeRow[]
 function M.flatten(tree, leaf_id)
 	local rows = {}
 
@@ -79,9 +79,9 @@ function M.flatten(tree, leaf_id)
 	return rows
 end
 
----@param tree table[]
+---@param tree PimSessionTreeNode[]
 ---@param entry_id string
----@return table[]|nil
+---@return PimSessionEntry[]|nil
 function M.path(tree, entry_id)
 	local entries = {}
 
@@ -102,9 +102,9 @@ function M.path(tree, entry_id)
 	return visit(tree) and entries or nil
 end
 
----@param tree table[]
+---@param tree PimSessionTreeNode[]
 ---@param entry_id string
----@return table[]|nil
+---@return PimMessage[]|nil
 function M.preview_messages(tree, entry_id)
 	local entries = M.path(tree, entry_id)
 	if not entries then

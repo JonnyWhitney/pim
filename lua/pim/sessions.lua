@@ -12,6 +12,10 @@ local function can_change()
 	return true
 end
 
+---@param action string
+---@param success boolean
+---@param data any
+---@return boolean
 local function valid_response(action, success, data)
 	if not success then
 		vim.notify(("[pim] %s failed: %s"):format(action, tostring(data)), vim.log.levels.ERROR)
@@ -21,6 +25,7 @@ local function valid_response(action, success, data)
 		vim.notify(("[pim] %s returned invalid data"):format(action), vim.log.levels.WARN)
 		return false
 	end
+	---@cast data PimRpcSessionActionResponse
 	if data.cancelled then
 		vim.notify(("[pim] %s cancelled by an extension"):format(action), vim.log.levels.WARN)
 		return false
@@ -42,6 +47,7 @@ function M.refresh()
 		elseif type(data) ~= "table" then
 			vim.notify("[pim] pi did not return state data", vim.log.levels.WARN)
 		else
+			---@cast data PimRpcState
 			state.apply_rpc_state(data)
 			state.poll_stats()
 		end
@@ -52,6 +58,7 @@ function M.refresh()
 		elseif type(data) ~= "table" or type(data.messages) ~= "table" then
 			vim.notify("[pim] pi did not return history data", vim.log.levels.WARN)
 		else
+			---@cast data PimRpcMessagesResponse
 			require("pim.events").load_messages(data.messages)
 		end
 	end)
@@ -94,6 +101,7 @@ function M.fork(entry_id)
 			vim.notify("[pim] fork returned invalid data", vim.log.levels.WARN)
 			return
 		end
+		---@cast data PimRpcForkResponse
 		require("pim.ui.input").replace(data.text)
 		M.refresh()
 	end)

@@ -22,7 +22,7 @@ local function decode(line)
 end
 
 ---@param lines string[]
----@return { id: string, timestamp: string, cwd: string, name: string|nil, preview: string|nil, message_count: integer, path: string|nil, mtime: integer|nil }|nil
+---@return PimSessionInfo|nil
 function M.parse_lines(lines)
 	if #lines == 0 then
 		return nil
@@ -66,7 +66,7 @@ function M.parse_lines(lines)
 	return info
 end
 
----@return table[]
+---@return PimSessionInfo[]
 function M.list_dir(dir)
 	local sessions = {}
 	if not vim.uv.fs_stat(dir) then
@@ -95,6 +95,8 @@ function M.list_dir(dir)
 	return sessions
 end
 
+---@param cwd string|nil
+---@return PimSessionInfo[]
 function M.list(cwd)
 	return M.list_dir(M.dir_for(cwd or vim.uv.cwd()))
 end

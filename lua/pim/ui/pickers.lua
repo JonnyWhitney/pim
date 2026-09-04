@@ -154,6 +154,7 @@ function M.fork()
 			vim.notify("[pim] No prompts are available for forking", vim.log.levels.WARN)
 			return
 		end
+		---@cast data PimRpcForkMessagesResponse
 
 		vim.ui.select(data.messages, {
 			prompt = "pi fork from prompt",
