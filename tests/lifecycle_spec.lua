@@ -259,6 +259,46 @@ return {
 		cleanup_guard(guard)
 	end,
 
+	["leaving Neovim stops the UI timers before pi shuts down"] = function()
+		local function active_timers()
+			local count = 0
+			vim.uv.walk(function(handle)
+				if handle:get_type() == "timer" and handle:is_active() then
+					count = count + 1
+				end
+			end)
+			return count
+		end
+
+		local guard = start_with_guard_tab()
+		h.wait_until(client.is_running, "fake pi start", 5000)
+		local idle = active_timers()
+		require("pim.state").update({ run_active = true, is_streaming = true })
+		h.wait_until(function()
+			return active_timers() > idle
+		end, "the busy spinner timer", 2000)
+
+		-- Keep pi alive so only the exit hook itself can close the UI timers.
+		local real_stop = client.stop
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.stop = function() end
+		local ok, err = pcall(vim.api.nvim_exec_autocmds, "VimLeavePre", { group = "pim-shutdown" })
+		client.stop = real_stop
+		if not ok then
+			error(err, 0)
+		end
+		local after_hook = active_timers()
+
+		-- A second explicit shutdown closes nothing more when the hook already did the work.
+		statusline.shutdown()
+		require("pim.ui.transcript").shutdown()
+		h.eq(after_hook, active_timers(), "the UI timers are closed by the exit hook")
+		h.ok(after_hook <= idle, "no UI timer survives exit")
+
+		require("pim").stop({ confirm = false })
+		cleanup_guard(guard)
+	end,
+
 	["repeated start/stop cycles accumulate nothing"] = function()
 		local function census()
 			local groups = {}

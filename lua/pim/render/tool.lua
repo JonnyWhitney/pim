@@ -148,6 +148,8 @@ local function result_text(result)
 		if type(result.text) == "string" then
 			return result.text
 		end
+		-- A result table with no text payload (for example, only `details`) has no output to show.
+		return ""
 	end
 	return vim.inspect(result)
 end

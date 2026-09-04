@@ -98,6 +98,10 @@ local function connect(extra_args)
 	vim.api.nvim_create_autocmd("VimLeavePre", {
 		group = vim.api.nvim_create_augroup("pim-shutdown", { clear = true }),
 		callback = function()
+			-- Stop UI timers before the blocking wait in client.stop pumps the event loop.
+			require("pim.ui.statusline").shutdown()
+			require("pim.ui.transcript").shutdown()
+			require("pim.ui.dialogs").reset()
 			require("pim.rpc.client").stop(1000)
 		end,
 	})

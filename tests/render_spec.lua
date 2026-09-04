@@ -153,6 +153,24 @@ return {
 		h.eq({}, block.folds)
 	end,
 
+	["tool result with no content has no fence and no fold"] = function()
+		local block = message_renderer.render({ role = "toolResult", toolName = "read", toolCallId = "t1" })
+		h.eq({ "▸ result(read)" }, block.lines)
+		h.eq({}, block.folds)
+
+		local bash = message_renderer.render(
+			{ role = "toolResult", toolName = "bash", toolCallId = "t1" },
+			{ tool_arguments = { t1 = { command = "ls -l" } } }
+		)
+		h.eq({ "▸ result(bash): ls -l", "```bash", "ls -l", "```" }, bash.lines)
+
+		local edit = message_renderer.render(
+			{ role = "toolResult", toolName = "edit", toolCallId = "t1", isError = true, details = { diff = "@@ x" } },
+			{ tool_arguments = { t1 = { path = "a.lua" } } }
+		)
+		h.eq({ "▸ result(edit): a.lua ✘ error", "```diff", "@@ x", "```" }, edit.lines)
+	end,
+
 	["tool results reuse call context"] = function()
 		local cases = {
 			{ name = "read", arguments = { path = "src/read.lua" }, context = "src/read.lua" },
