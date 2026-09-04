@@ -210,6 +210,46 @@ return {
 		h.ok(rendered:find("the output", 1, true), "its result rendered")
 	end,
 
+	["tool events share context and only the end event is final"] = function()
+		local original_set = transcript.set
+		local calls = {}
+		---@diagnostic disable-next-line: duplicate-set-field
+		transcript.set = function(key, kind, rendered, opts)
+			calls[#calls + 1] = { key = key, kind = kind, rendered = rendered, opts = opts }
+		end
+
+		local success, err = xpcall(function()
+			events.handle({ type = "tool_execution_start", toolCallId = "call-1", toolName = "bash" })
+			events.handle({
+				type = "tool_execution_update",
+				toolCallId = "call-1",
+				toolName = "bash",
+				args = { command = "mise test" },
+				partialResult = "partial output",
+			})
+			events.handle({
+				type = "tool_execution_end",
+				toolCallId = "call-1",
+				toolName = "bash",
+				---@diagnostic disable-next-line: assign-type-mismatch
+				args = "malformed",
+				result = "final output",
+			})
+		end, debug.traceback)
+		transcript.set = original_set
+		if not success then
+			error(err, 0)
+		end
+
+		h.eq(3, #calls)
+		h.eq(nil, calls[1].opts)
+		h.eq(nil, calls[2].opts)
+		h.eq({ final = true }, calls[3].opts)
+		h.ok(calls[2].rendered.lines[1]:find("mise test", 1, true), "the update adds argument context")
+		h.ok(calls[3].rendered.lines[1]:find("mise test", 1, true), "the end reuses valid arguments")
+		h.ok(table.concat(calls[3].rendered.lines, "\n"):find("final output", 1, true), "the final result renders")
+	end,
+
 	["loaded tool results recover context from earlier calls"] = function()
 		layout.open()
 		events.load_messages({

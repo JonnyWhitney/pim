@@ -53,8 +53,9 @@ end
 local function event_arguments(event)
 	if type(event.args) == "table" then
 		tool_arguments[event.toolCallId] = event.args
+		return event.args
 	end
-	return event.args or tool_arguments[event.toolCallId]
+	return tool_arguments[event.toolCallId]
 end
 
 ---@param event PimEvent
@@ -64,6 +65,37 @@ local function event_preview(event, arguments)
 		tool_previews[event.toolCallId] = tool_preview.generate(event.toolName, arguments)
 	end
 	return tool_previews[event.toolCallId]
+end
+
+---@param event PimEvent
+local function handle_tool_event(event)
+	if type(event.toolCallId) ~= "string" then
+		log.add("!", ("%s without a toolCallId; skipped"):format(tostring(event.type)))
+		return
+	end
+
+	local arguments = event_arguments(event)
+	local final = event.type == "tool_execution_end"
+	local result
+	if event.type == "tool_execution_update" then
+		result = event.partialResult
+	elseif final then
+		result = event.result
+	end
+	local execution = {
+		toolName = event.toolName,
+		args = arguments,
+		preview = event_preview(event, arguments),
+		running = not final,
+		isError = final and event.isError or nil,
+		result = result,
+	}
+	transcript.set(
+		"tool-" .. event.toolCallId,
+		"tool",
+		tool_renderer.execution(execution),
+		final and { final = true } or nil
+	)
 end
 
 local function next_key()
@@ -181,12 +213,6 @@ function M.handle(event)
 	state.handle_event(event)
 
 	local kind = event.type
-	-- Tool updates share one transcript block by toolCallId. Ignore updates that cannot identify it.
-	if TOOL_EVENTS[kind] and type(event.toolCallId) ~= "string" then
-		log.add("!", ("%s without a toolCallId; skipped"):format(kind))
-		return
-	end
-
 	if kind == "message_start" then
 		current_message = type(event.message) == "table" and vim.deepcopy(event.message) or nil
 		tool_argument_json = {}
@@ -220,45 +246,8 @@ function M.handle(event)
 		if type(event.message) == "table" and event.message.role == "assistant" then
 			state.poll_stats()
 		end
-	elseif kind == "tool_execution_start" then
-		local arguments = event_arguments(event)
-		transcript.set(
-			"tool-" .. event.toolCallId,
-			"tool",
-			tool_renderer.execution({
-				toolName = event.toolName,
-				args = arguments,
-				preview = event_preview(event, arguments),
-				running = true,
-			})
-		)
-	elseif kind == "tool_execution_update" then
-		local arguments = event_arguments(event)
-		transcript.set(
-			"tool-" .. event.toolCallId,
-			"tool",
-			tool_renderer.execution({
-				toolName = event.toolName,
-				args = arguments,
-				preview = event_preview(event, arguments),
-				running = true,
-				result = event.partialResult,
-			})
-		)
-	elseif kind == "tool_execution_end" then
-		local arguments = event_arguments(event)
-		transcript.set(
-			"tool-" .. event.toolCallId,
-			"tool",
-			tool_renderer.execution({
-				toolName = event.toolName,
-				args = arguments,
-				preview = event_preview(event, arguments),
-				isError = event.isError,
-				result = event.result,
-			}),
-			{ final = true }
-		)
+	elseif TOOL_EVENTS[kind] then
+		handle_tool_event(event)
 	elseif kind == "queue_update" then
 		transcript.set_queue(event.steering, event.followUp)
 	elseif kind == "agent_settled" then

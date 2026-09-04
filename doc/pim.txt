@@ -216,11 +216,11 @@ Calling setup() is optional. All options have default values.
     debug = false,              -- Record raw RPC traffic for :PiLog.
   })
 <
-Invalid option values cause an error. Unknown option keys cause a warning. The
-warning suggests a key when pim finds a close match.
+Invalid option values cause an error. Unknown option keys cause a warning that
+includes the full key path.
 >
   [pim] ignoring unknown config keys:
-    keymap — did you mean "keymaps"?
+    keymaps.submitt
 <
 The warning does not stop setup(). Valid options still apply.
 

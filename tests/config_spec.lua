@@ -92,21 +92,21 @@ return {
 		end, "pi_cmd")
 	end,
 
-	["an unknown top-level key warns and suggests the real one"] = function()
+	["an unknown top-level key warns without a suggestion"] = function()
 		local warning = assert(setup_capturing_warning({ keymap = { submit = "<C-s>" } }), "a warning was emitted")
 
 		h.ok(warning:find("keymap", 1, true), "names the offending key")
-		h.ok(warning:find('did you mean "keymaps"', 1, true), "suggests the real key, got: " .. warning)
+		h.ok(not warning:find("did you mean", 1, true), "does not suggest a key, got: " .. warning)
 	end,
 
 	["an unknown nested key is reported by its full path"] = function()
 		local warning = assert(setup_capturing_warning({ keymaps = { submitt = "<C-s>" } }), "a warning was emitted")
 
 		h.ok(warning:find("keymaps.submitt", 1, true), "reports the dotted path, got: " .. warning)
-		h.ok(warning:find('did you mean "submit"', 1, true), "suggests the real key")
+		h.ok(not warning:find("did you mean", 1, true), "does not suggest a key")
 	end,
 
-	["a typo with no plausible match is reported without a guess"] = function()
+	["an unrelated unknown key is reported without a guess"] = function()
 		local warning = assert(setup_capturing_warning({ zzzzzzz = true }), "a warning was emitted")
 
 		h.ok(warning:find("zzzzzzz", 1, true), "names the offending key")

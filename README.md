@@ -178,8 +178,7 @@ require("pim").setup({
 })
 ```
 
-Invalid setting values cause an error. Unknown setting keys cause a warning.
-The warning includes a suggested key when one is available.
+Invalid setting values cause an error. Unknown setting keys cause a warning that includes the full key path.
 
 The winbar shows the pi provider, model, thinking level, configuration
 directory, and context usage. Context usage has the form `ctx:12k/100k (12%)`
