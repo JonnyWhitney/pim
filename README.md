@@ -9,7 +9,7 @@ Markdown Treesitter, and the pi RPC interface.
 ## Requirements
 
 - Neovim nightly. Other Neovim releases are not supported.
-- The `pi` command on `$PATH`, or a `pi_cmd` setting that identifies pi.
+- Pi 0.84.4 or newer. Put `pi` on `$PATH`, or set `pi_cmd` to identify it.
 
 ## Install
 
@@ -71,7 +71,7 @@ toggle a fold.
 | `:PiStart` | Open the UI. Start pi if it is stopped. |
 | `:PiToggle` | Show or hide the pi windows. |
 | `:PiSend [text]` | Send text. Without text, send the input buffer. |
-| `:PiAbort` | Stop the current agent run. |
+| `:PiAbort` | Clear queued prompts, restore them to input history, and stop the current agent run. |
 | `:PiResume` | Select a session for the current directory. |
 | `:PiTree` | Browse the active session tree. Prompts are disabled while it is open. |
 | `:PiTrust` | Manage project trust for the current working directory. |
@@ -127,6 +127,12 @@ In Insert mode, `<CR>` inserts a new line. pim does not change `Esc`.
 
 If pi rejects a prompt, pim restores the prompt when the input is empty.
 If you enter new text first, press `<Up>` to recall the rejected prompt.
+
+When you abort an agent run, pim first clears queued steering and follow-up
+prompts. It restores the first queued prompt to an empty input buffer and keeps
+each queued prompt as a separate history entry. If the input has a newer draft,
+pim preserves it and adds the queued prompts to history. Bash abort remains
+direct and does not change the agent queue.
 
 ## Shell commands
 

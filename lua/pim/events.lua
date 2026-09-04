@@ -14,6 +14,9 @@ local TOOL_EVENTS = {
 
 local message_counter = 0
 local current_key = nil
+---@type table|nil
+local current_message = nil
+local tool_argument_json = {}
 local tool_arguments = {}
 local tool_previews = {}
 
@@ -25,11 +28,16 @@ local function render_opts()
 end
 
 local function remember_tool_calls(message)
-	if not message or message.role ~= "assistant" then
+	if type(message) ~= "table" or message.role ~= "assistant" or type(message.content) ~= "table" then
 		return
 	end
-	for _, block in ipairs(message.content or {}) do
-		if block.type == "toolCall" and type(block.id) == "string" and type(block.arguments) == "table" then
+	for _, block in ipairs(message.content) do
+		if
+			type(block) == "table"
+			and block.type == "toolCall"
+			and type(block.id) == "string"
+			and type(block.arguments) == "table"
+		then
 			tool_arguments[block.id] = block.arguments
 		end
 	end
@@ -54,9 +62,104 @@ local function next_key()
 	return ("msg-%d"):format(message_counter)
 end
 
+local function set_message(key, message, opts)
+	local ok, rendered = pcall(render.message, message, render_opts())
+	if not ok then
+		log.add("!", "Cannot render message event: " .. tostring(rendered))
+		return
+	end
+	transcript.set(key, "message", rendered, opts)
+end
+
+---@return table|nil, integer|nil
+local function content_block(update, block_type, field)
+	if type(current_message) ~= "table" or current_message.role ~= "assistant" then
+		return nil
+	end
+	if type(current_message.content) ~= "table" then
+		current_message.content = {}
+	end
+	if type(update.contentIndex) ~= "number" or update.contentIndex < 0 or update.contentIndex % 1 ~= 0 then
+		return nil
+	end
+
+	local index = update.contentIndex + 1
+	if index > #current_message.content + 1 then
+		return nil
+	end
+	local block = current_message.content[index]
+	if type(block) ~= "table" or block.type ~= block_type then
+		block = { type = block_type, [field] = "" }
+		current_message.content[index] = block
+	end
+	return block, index
+end
+
+local function apply_text_delta(update, block_type, field)
+	local block = content_block(update, block_type, field)
+	if not block then
+		return
+	end
+	if update.type == block_type .. "_start" then
+		block[field] = ""
+	elseif update.type == block_type .. "_delta" and type(update.delta) == "string" then
+		block[field] = (type(block[field]) == "string" and block[field] or "") .. update.delta
+	elseif update.type == block_type .. "_end" and type(update.content) == "string" then
+		block[field] = update.content
+	end
+end
+
+local function apply_toolcall_delta(update)
+	local block, index = content_block(update, "toolCall", "arguments")
+	local message = current_message
+	if not block or not index or type(message) ~= "table" or type(message.content) ~= "table" then
+		return
+	end
+	if update.type == "toolcall_start" then
+		block.id = type(update.id) == "string" and update.id or nil
+		block.name = type(update.toolName) == "string" and update.toolName or nil
+		block.arguments = {}
+		tool_argument_json[index] = ""
+	elseif update.type == "toolcall_delta" and type(update.delta) == "string" then
+		local json = (tool_argument_json[index] or "") .. update.delta
+		tool_argument_json[index] = json
+		local ok, arguments = pcall(vim.json.decode, json)
+		if ok and type(arguments) == "table" then
+			block.arguments = arguments
+		end
+	elseif update.type == "toolcall_end" and type(update.toolCall) == "table" then
+		message.content[index] = vim.deepcopy(update.toolCall)
+		tool_argument_json[index] = nil
+	end
+end
+
+local function apply_message_update(event)
+	local update = event.assistantMessageEvent
+	if type(update) ~= "table" or type(update.type) ~= "string" then
+		return false
+	end
+
+	if update.type == "text_start" or update.type == "text_delta" or update.type == "text_end" then
+		apply_text_delta(update, "text", "text")
+	elseif update.type == "thinking_start" or update.type == "thinking_delta" or update.type == "thinking_end" then
+		apply_text_delta(update, "thinking", "thinking")
+	elseif update.type == "toolcall_start" or update.type == "toolcall_delta" or update.type == "toolcall_end" then
+		apply_toolcall_delta(update)
+	else
+		return false
+	end
+
+	if type(current_message) == "table" and type(event.usage) == "table" then
+		current_message.usage = vim.deepcopy(event.usage)
+	end
+	return current_message ~= nil
+end
+
 function M.reset()
 	message_counter = 0
 	current_key = nil
+	current_message = nil
+	tool_argument_json = {}
 	tool_arguments = {}
 	tool_previews = {}
 end
@@ -73,25 +176,36 @@ function M.handle(event)
 	end
 
 	if kind == "message_start" then
-		if event.message and event.message.role == "toolResult" then
+		current_message = type(event.message) == "table" and vim.deepcopy(event.message) or nil
+		tool_argument_json = {}
+		if type(event.message) == "table" and event.message.role == "toolResult" then
 			current_key = nil
 			return
 		end
-		remember_tool_calls(event.message)
-		current_key = next_key()
-		transcript.set(current_key, "message", render.message(event.message, render_opts()))
+		remember_tool_calls(current_message)
+		if current_message then
+			current_key = next_key()
+			set_message(current_key, current_message)
+		else
+			current_key = nil
+		end
 	elseif kind == "message_update" then
-		remember_tool_calls(event.message)
-		if current_key then
-			transcript.set(current_key, "message", render.message(event.message, render_opts()))
+		if current_key and apply_message_update(event) then
+			local message = current_message
+			if message then
+				remember_tool_calls(message)
+				set_message(current_key, message)
+			end
 		end
 	elseif kind == "message_end" then
 		remember_tool_calls(event.message)
-		if current_key then
-			transcript.set(current_key, "message", render.message(event.message, render_opts()), { final = true })
-			current_key = nil
+		if current_key and type(event.message) == "table" then
+			set_message(current_key, event.message, { final = true })
 		end
-		if event.message and event.message.role == "assistant" then
+		current_key = nil
+		current_message = nil
+		tool_argument_json = {}
+		if type(event.message) == "table" and event.message.role == "assistant" then
 			state.poll_stats()
 		end
 	elseif kind == "tool_execution_start" then

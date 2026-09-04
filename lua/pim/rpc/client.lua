@@ -226,6 +226,10 @@ function M.get_commands(callback)
 	M.request("get_commands", nil, callback)
 end
 
+function M.clear_queue(callback)
+	M.request("clear_queue", nil, callback)
+end
+
 function M.abort(callback)
 	M.request("abort", nil, callback)
 end

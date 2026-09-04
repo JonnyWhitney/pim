@@ -258,12 +258,45 @@ function M.stop(opts)
 	end)
 end
 
+local function queued_messages(data)
+	if type(data) ~= "table" or type(data.steering) ~= "table" or type(data.followUp) ~= "table" then
+		return nil
+	end
+
+	local messages = {}
+	for _, queue in ipairs({ data.steering, data.followUp }) do
+		for _, text in ipairs(queue) do
+			if type(text) ~= "string" then
+				return nil
+			end
+			messages[#messages + 1] = text
+		end
+	end
+	return messages
+end
+
 function M.abort()
 	local state = require("pim.state").get()
 	if state.bash_running then
 		require("pim.bash").abort()
 	elseif state.is_streaming then
-		require("pim.rpc.client").abort()
+		local client = require("pim.rpc.client")
+		client.clear_queue(function(success, data)
+			if not success then
+				vim.notify("[pim] clear_queue failed: " .. tostring(data), vim.log.levels.ERROR)
+			else
+				local messages = queued_messages(data)
+				if messages then
+					local recovered, err = pcall(require("pim.ui.input").restore_queued, messages)
+					if not recovered then
+						vim.notify("[pim] Cannot restore cleared prompts: " .. tostring(err), vim.log.levels.ERROR)
+					end
+				else
+					vim.notify("[pim] pi returned invalid clear_queue data", vim.log.levels.ERROR)
+				end
+			end
+			client.abort()
+		end)
 	end
 end
 

@@ -143,7 +143,7 @@ return {
 		}, events)
 	end,
 
-	["streaming events carry the full accumulated message"] = function()
+	["streaming events use the current delta-only shape"] = function()
 		local last_update
 		start_fake(nil, {
 			on_event = function(event)
@@ -155,11 +155,65 @@ return {
 
 		client.prompt("hi", nil, nil)
 		wait_for(function()
-			return last_update ~= nil and last_update.message.content[1].text == "Hello from fake pi"
+			return last_update ~= nil and last_update.assistantMessageEvent.type == "text_end"
 		end, "final message_update")
 
-		local sub = last_update.assistantMessageEvent.type
-		h.ok(sub == "text_delta" or sub == "text_end", "update carries an assistantMessageEvent")
+		h.eq(nil, last_update.message, "the removed cumulative message is absent")
+		h.eq("Hello from fake pi", last_update.assistantMessageEvent.content)
+		h.eq(14, last_update.usage.totalTokens, "the update carries cumulative usage")
+	end,
+
+	["clear_queue returns both queues in delivery order and removes them"] = function()
+		start_fake("queue")
+		local first, second
+		client.clear_queue(function(success, data)
+			first = { success = success, data = data }
+		end)
+		wait_for(function()
+			return first ~= nil
+		end, "first clear_queue response")
+		client.clear_queue(function(success, data)
+			second = { success = success, data = data }
+		end)
+		wait_for(function()
+			return second ~= nil
+		end, "second clear_queue response")
+
+		h.eq(true, first.success)
+		h.eq({ "change direction", "also add tests" }, first.data.steering)
+		h.eq({ "write docs" }, first.data.followUp)
+		h.eq(true, second.success)
+		h.eq({}, second.data.steering)
+		h.eq({}, second.data.followUp)
+	end,
+
+	["clear_queue reports an empty queue"] = function()
+		start_fake()
+		local result
+		client.clear_queue(function(success, data)
+			result = { success = success, data = data }
+		end)
+		wait_for(function()
+			return result ~= nil
+		end, "empty clear_queue response")
+
+		h.eq(true, result.success)
+		h.eq({}, result.data.steering)
+		h.eq({}, result.data.followUp)
+	end,
+
+	["clear_queue surfaces a failed response"] = function()
+		start_fake("clearfail")
+		local result
+		client.clear_queue(function(success, data)
+			result = { success = success, data = data }
+		end)
+		wait_for(function()
+			return result ~= nil
+		end, "failed clear_queue response")
+
+		h.eq(false, result.success)
+		h.eq("cannot clear", result.data)
 	end,
 
 	["graceful stop closes stdin and reports intentional exit code 0"] = function()

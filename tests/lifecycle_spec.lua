@@ -334,6 +334,71 @@ return {
 		h.ok(not vim.list_contains(argv, missing), "and not the stale path either")
 	end,
 
+	["agent abort clears queued prompts before aborting the run"] = function()
+		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "queue" } })
+		require("pim").start()
+		h.wait_until(function()
+			return require("pim.state").get().connected
+		end, "the queued fake pi connection", 5000)
+
+		local sent = {}
+		local real_request = client.request
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.request = function(command_type, params, callback)
+			sent[#sent + 1] = command_type
+			return real_request(command_type, params, callback)
+		end
+		require("pim.state").update({ is_streaming = true })
+		require("pim").abort()
+		h.wait_until(function()
+			return sent[#sent] == "abort"
+		end, "clear_queue followed by abort", 5000)
+		client.request = real_request
+
+		h.eq({ "clear_queue", "abort" }, sent)
+		local input_text = table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
+		h.eq("change direction", input_text, "the first queued message returns to input")
+	end,
+
+	["agent abort still runs after clear_queue fails"] = function()
+		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "clearfail" } })
+		require("pim").start()
+		h.wait_until(function()
+			return require("pim.state").get().connected
+		end, "the clear-failure fake pi connection", 5000)
+
+		local sent = {}
+		local notified = {}
+		local real_request, real_notify = client.request, vim.notify
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.request = function(command_type, params, callback)
+			sent[#sent + 1] = command_type
+			return real_request(command_type, params, callback)
+		end
+		vim.notify = function(message, level)
+			notified[#notified + 1] = { message = message, level = level }
+		end
+		require("pim.state").update({ is_streaming = true })
+		require("pim").abort()
+		local ok, err = pcall(function()
+			h.wait_until(function()
+				return sent[#sent] == "abort"
+			end, "abort after clear_queue failure", 5000)
+		end)
+		client.request, vim.notify = real_request, real_notify
+		if not ok then
+			error(err, 0)
+		end
+
+		h.eq({ "clear_queue", "abort" }, sent)
+		h.ok(
+			vim.iter(notified):any(function(item)
+				return item.message:find("clear_queue failed", 1, true) ~= nil
+			end),
+			"the failed recovery is reported"
+		)
+	end,
+
 	["an intentional stop reports stopped with no exit code"] = function()
 		start_and_connect()
 

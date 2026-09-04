@@ -147,7 +147,7 @@ return {
 		client.request = real_request
 		state.update({ is_streaming = false })
 
-		h.eq({ "abort_bash", "abort" }, sent, "bash takes precedence, then the agent")
+		h.eq({ "abort_bash", "clear_queue", "abort" }, sent, "bash stays direct; agent abort clears its queue first")
 	end,
 
 	["abort does nothing when nothing is running"] = function()

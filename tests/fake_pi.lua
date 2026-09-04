@@ -6,6 +6,8 @@ local SCENARIOS = {
 	nocontext = true,
 	nullcontext = true,
 	retry = true,
+	queue = true,
+	clearfail = true,
 }
 
 local scenario = "basic"
@@ -44,6 +46,22 @@ end
 local function tool_result(text)
 	return { content = { { type = "text", text = text } } }
 end
+
+local function usage(output)
+	return {
+		input = 10,
+		output = output,
+		cacheRead = 0,
+		cacheWrite = 0,
+		totalTokens = 10 + output,
+		cost = { input = 0, output = 0, cacheRead = 0, cacheWrite = 0, total = 0 },
+	}
+end
+
+local queues = {
+	steering = scenario == "queue" and { "change direction", "also add tests" } or {},
+	followUp = scenario == "queue" and { "write docs" } or {},
+}
 
 local fork_messages = {
 	{ entryId = "tree-1", text = "Start the parser" },
@@ -118,8 +136,27 @@ local function run_tool_turn(cmd)
 	send({ type = "message_start", message = { role = "assistant", content = {} } })
 	send({
 		type = "message_update",
-		message = { role = "assistant", content = { call } },
-		assistantMessageEvent = { type = "toolcall_end" },
+		usage = usage(5),
+		assistantMessageEvent = {
+			type = "toolcall_start",
+			contentIndex = 0,
+			id = call.id,
+			toolName = call.name,
+		},
+	})
+	send({
+		type = "message_update",
+		usage = usage(8),
+		assistantMessageEvent = {
+			type = "toolcall_delta",
+			contentIndex = 0,
+			delta = '{"command":"ls"}',
+		},
+	})
+	send({
+		type = "message_update",
+		usage = usage(10),
+		assistantMessageEvent = { type = "toolcall_end", contentIndex = 0, toolCall = call },
 	})
 	send({ type = "message_end", message = { role = "assistant", content = { call } } })
 	send({ type = "tool_execution_start", toolCallId = "call-1", toolName = "bash", args = call.arguments })
@@ -158,8 +195,8 @@ local function run_tool_turn(cmd)
 	send({ type = "message_start", message = assistant("") })
 	send({
 		type = "message_update",
-		message = assistant("Two files."),
-		assistantMessageEvent = { type = "text_delta", delta = "Two files." },
+		usage = usage(2),
+		assistantMessageEvent = { type = "text_delta", contentIndex = 0, delta = "Two files." },
 	})
 	send({ type = "message_end", message = assistant("Two files.") })
 	send({ type = "turn_end", message = assistant("Two files."), toolResults = {} })
@@ -180,8 +217,8 @@ local function run_retry_turn(cmd)
 	send({ type = "message_start", message = assistant("") })
 	send({
 		type = "message_update",
-		message = assistant("Hello on the second try"),
-		assistantMessageEvent = { type = "text_delta", delta = "Hello on the second try" },
+		usage = usage(5),
+		assistantMessageEvent = { type = "text_delta", contentIndex = 0, delta = "Hello on the second try" },
 	})
 	send({ type = "message_end", message = assistant("Hello on the second try") })
 	send({ type = "turn_end", message = assistant("Hello on the second try"), toolResults = {} })
@@ -218,7 +255,11 @@ local function run_hostile_turn(cmd)
 	io.stdout:write(split:sub(16) .. "\n")
 	io.stdout:flush()
 
-	send({ type = "message_update", message = assistant(string.rep("x", 60000)) })
+	send({
+		type = "message_update",
+		usage = usage(60000),
+		assistantMessageEvent = { type = "text_delta", contentIndex = 0, delta = string.rep("x", 60000) },
+	})
 
 	send({ type = "message_end", message = assistant("survived") })
 	send({ type = "agent_end", willRetry = false })
@@ -232,8 +273,8 @@ local function finish_dialog_turn(answer)
 	send({ type = "message_start", message = assistant("") })
 	send({
 		type = "message_update",
-		message = assistant(text),
-		assistantMessageEvent = { type = "text_delta", delta = text },
+		usage = usage(4),
+		assistantMessageEvent = { type = "text_delta", contentIndex = 0, delta = text },
 	})
 	send({ type = "message_end", message = assistant(text) })
 	send({ type = "turn_end", message = assistant(text), toolResults = {} })
@@ -354,26 +395,26 @@ local function handle(cmd)
 		send({ type = "message_start", message = assistant("") })
 		send({
 			type = "message_update",
-			message = assistant(""),
-			assistantMessageEvent = { type = "text_start" },
+			usage = usage(0),
+			assistantMessageEvent = { type = "text_start", contentIndex = 0 },
 		})
 		send({
 			type = "message_update",
-			message = assistant("Hello"),
-			assistantMessageEvent = { type = "text_delta", delta = "Hello" },
+			usage = usage(1),
+			assistantMessageEvent = { type = "text_delta", contentIndex = 0, delta = "Hello" },
 		})
 		if scenario == "crash" then
 			os.exit(7)
 		end
 		send({
 			type = "message_update",
-			message = assistant("Hello from fake pi"),
-			assistantMessageEvent = { type = "text_delta", delta = " from fake pi" },
+			usage = usage(4),
+			assistantMessageEvent = { type = "text_delta", contentIndex = 0, delta = " from fake pi" },
 		})
 		send({
 			type = "message_update",
-			message = assistant("Hello from fake pi"),
-			assistantMessageEvent = { type = "text_end" },
+			usage = usage(4),
+			assistantMessageEvent = { type = "text_end", contentIndex = 0, content = "Hello from fake pi" },
 		})
 		send({ type = "message_end", message = assistant("Hello from fake pi") })
 		send({ type = "turn_end", message = assistant("Hello from fake pi") })
@@ -459,6 +500,13 @@ local function handle(cmd)
 		})
 	elseif cmd.type == "abort_bash" then
 		send({ type = "response", id = cmd.id, command = "abort_bash", success = true })
+	elseif cmd.type == "clear_queue" and scenario == "clearfail" then
+		send({ type = "response", id = cmd.id, command = "clear_queue", success = false, error = "cannot clear" })
+	elseif cmd.type == "clear_queue" then
+		local cleared = queues
+		queues = { steering = {}, followUp = {} }
+		send({ type = "response", id = cmd.id, command = "clear_queue", success = true, data = cleared })
+		send({ type = "queue_update", steering = {}, followUp = {} })
 	elseif cmd.type == "abort" then
 		send({ type = "response", id = cmd.id, command = "abort", success = true })
 	elseif cmd.type == "bare_ack" then

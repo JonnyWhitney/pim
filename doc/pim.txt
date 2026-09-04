@@ -31,7 +31,7 @@ proposed operation while a permission dialog is open. This preview is
 display-only and does not add a message to the model context. Completed tool calls and their
 results start folded by default. Use <Tab> to toggle a fold.
 
-pim targets Neovim nightly and requires the `pi` command. It has no plugin
+pim targets Neovim nightly and requires Pi 0.84.4 or newer. It has no plugin
 dependencies. Other Neovim releases are not supported.
 
 The transcript winbar shows the provider, model, thinking level, pi
@@ -62,7 +62,8 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     Send {text} as a prompt. Without {text}, send the input buffer contents.
 
 :PiAbort                                                            *:PiAbort*
-    Stop the current agent run. Stop a shell command first when one is active.
+    Clear queued prompts, restore them to input history, and stop the current
+    agent run. Stop a shell command directly when one is active.
 
 :PiResume                                                          *:PiResume*
     Select a session for the current working directory. pim loads the
@@ -162,6 +163,11 @@ Insert-mode <CR> inserts a new line. pim does not remap Esc.
 pim clears the input after you send it. If pi rejects the prompt, pim
 restores it when the input remains empty. If you enter new text, press <Up> to
 recall the rejected prompt.
+
+When you abort an agent run, pim first clears queued steering and follow-up
+prompts. It puts the first queued prompt in an empty input buffer and keeps
+each queued prompt as a separate history entry. If the input has a newer
+draft, pim preserves it and adds the queued prompts to history.
 
                                                               *pim-shell*
 Shell commands ~
