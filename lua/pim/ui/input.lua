@@ -99,6 +99,9 @@ local function dispatch(text, behavior, on_reject)
 		return
 	end
 
+	if not require("pim.state").is_busy() then
+		layout.scroll_transcript_to_bottom()
+	end
 	local streaming_behavior = behavior or require("pim.config").get().streaming_submit
 	require("pim.rpc.client").prompt(text, { streaming_behavior = streaming_behavior }, function(success, err)
 		if not success then

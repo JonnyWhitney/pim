@@ -1,4 +1,5 @@
 local layout = require("pim.ui.layout")
+local view = require("pim.ui.transcript_view")
 
 local M = {}
 
@@ -62,7 +63,20 @@ local function write_block(buf, index)
 
 	if block.mark then
 		local srow, erow = region(buf, index)
+		local following = {}
+		for i = index + 1, #blocks do
+			if blocks[i].mark then
+				following[#following + 1] = { mark = blocks[i].mark, row = mark_row(buf, blocks[i].mark) }
+			end
+		end
 		vim.api.nvim_buf_set_lines(buf, srow, erow, false, text)
+		-- Boundary marks are rebound because replacement can collapse them into the changed range.
+		for _, mark in ipairs(following) do
+			vim.api.nvim_buf_set_extmark(buf, ns, mark.row + #text - (erow - srow), 0, {
+				id = mark.mark,
+				right_gravity = false,
+			})
+		end
 		block.srow = srow
 		return
 	end
@@ -112,18 +126,15 @@ local function apply_folds(buf, block)
 	end
 end
 
-local function following_windows(buf)
-	local wins = {}
-	local last = vim.api.nvim_buf_line_count(buf)
-	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-		local bottom_visible = vim.api.nvim_win_call(win, function()
-			return vim.fn.line("w$")
-		end)
-		if bottom_visible >= last - 1 then
-			wins[#wins + 1] = win
+local function ranges(buf)
+	local result = {}
+	for index, block in ipairs(blocks) do
+		if block.mark then
+			local first, last = region(buf, index)
+			result[#result + 1] = { key = block.key, first = first + 1, last = last }
 		end
 	end
-	return wins
+	return result
 end
 
 function M.flush()
@@ -139,8 +150,7 @@ function M.flush()
 		rebind(buf)
 	end
 
-	-- Find viewers at the end before writing. Keep only those viewers following the stream.
-	local follow = following_windows(buf)
+	local saved = view.capture(buf, ranges(buf))
 
 	vim.bo[buf].modifiable = true
 	local written = {}
@@ -157,12 +167,7 @@ function M.flush()
 		apply_folds(buf, block)
 	end
 
-	local last = vim.api.nvim_buf_line_count(buf)
-	for _, win in ipairs(follow) do
-		if vim.api.nvim_win_is_valid(win) then
-			vim.api.nvim_win_set_cursor(win, { last, 0 })
-		end
-	end
+	view.restore(saved, ranges(buf))
 end
 
 ---@param key string
@@ -229,10 +234,12 @@ end
 
 function M.shutdown()
 	stop_timer()
+	view.shutdown()
 end
 
 function M.reset()
 	stop_timer()
+	view.reset()
 	blocks, by_key, dirty = {}, {}, {}
 	divider_count = 0
 	local buf = layout.transcript_buf()
