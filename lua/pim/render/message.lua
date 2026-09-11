@@ -85,36 +85,21 @@ local function render_custom(message)
 	return { lines = lines, folds = {} }
 end
 
-local function render_branch_summary(message)
-	local lines = { "▸ branch summary" }
-	markdown.append_quoted(lines, message.summary or "")
-	return { lines = lines, folds = { { first = 0, last = #lines - 1, kind = "summary" } } }
-end
-
-local function render_compaction_summary(message)
-	local header = "▸ compacted"
-	if message.tokensBefore then
-		header = ("▸ compacted (%d tokens before)"):format(message.tokensBefore)
-	end
-	local lines = { header }
-	markdown.append_quoted(lines, message.summary or "")
-	return { lines = lines, folds = { { first = 0, last = #lines - 1, kind = "summary" } } }
-end
-
 local renderers = {
 	user = render_user,
 	assistant = render_assistant,
 	toolResult = render_tool_result,
 	bashExecution = tool.bash_execution,
 	custom = render_custom,
-	branchSummary = render_branch_summary,
-	compactionSummary = render_compaction_summary,
 }
 
 ---@param message PimMessage|nil
 ---@param opts { thinking: "folded"|"open"|"hidden"|nil, tool_arguments: table<string, table>|nil }|nil
 ---@return PimRenderedBlock
 function M.render(message, opts)
+	if message and (message.role == "branchSummary" or message.role == "compactionSummary") then
+		return { lines = {}, folds = {} }
+	end
 	local renderer = message and renderers[message.role]
 	if not renderer then
 		return {

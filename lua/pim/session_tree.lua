@@ -53,8 +53,25 @@ end
 function M.flatten(tree, leaf_id)
 	local rows = {}
 
+	-- Hidden entries are bypassed only for display; the source tree is retained.
+	local function visible_nodes(nodes)
+		local visible = {}
+		for _, node in ipairs(nodes or {}) do
+			local entry = node.entry
+			if type(entry) == "table" then
+				if entry.type == "branch_summary" or entry.type == "compaction" then
+					vim.list_extend(visible, visible_nodes(node.children))
+				else
+					visible[#visible + 1] = node
+				end
+			end
+		end
+		return visible
+	end
+
 	local function visit(nodes, prefix, nested)
-		for index, node in ipairs(nodes or {}) do
+		nodes = visible_nodes(nodes)
+		for index, node in ipairs(nodes) do
 			local entry = node.entry
 			if type(entry) == "table" then
 				local last = index == #nodes
@@ -115,17 +132,6 @@ function M.preview_messages(tree, entry_id)
 	for _, entry in ipairs(entries) do
 		if entry.type == "message" and type(entry.message) == "table" then
 			messages[#messages + 1] = entry.message
-		elseif entry.type == "compaction" then
-			messages[#messages + 1] = {
-				role = "compactionSummary",
-				summary = entry.summary,
-				tokensBefore = entry.tokensBefore,
-			}
-		elseif entry.type == "branch_summary" then
-			messages[#messages + 1] = {
-				role = "branchSummary",
-				summary = entry.summary,
-			}
 		elseif entry.type == "custom_message" then
 			messages[#messages + 1] = {
 				role = "custom",

@@ -25,6 +25,71 @@ local function transcript_text()
 end
 
 return {
+	["hidden leaves and entirely hidden trees keep selection safe"] = function()
+		layout.open()
+		local real_get_tree = client.get_tree
+		local ok, err = pcall(function()
+			for _, visible in ipairs({ true, false }) do
+				local hidden = { entry = { type = "compaction", id = "hidden" } }
+				local nodes = visible
+						and {
+							{
+								entry = {
+									type = "message",
+									id = "prompt",
+									message = { role = "user", content = "Visible prompt" },
+								},
+								children = { hidden },
+							},
+						}
+					or { hidden }
+				---@diagnostic disable-next-line: duplicate-set-field
+				client.get_tree = function(callback)
+					callback(true, { tree = nodes, leafId = "hidden" })
+				end
+				tree.open()
+				if visible then
+					h.eq("prompt", tree.selected().id)
+					tree.preview()
+					h.ok(transcript_text():find("Visible prompt", 1, true))
+					tree.return_to_tree()
+					h.eq("prompt", tree.selected().id)
+				else
+					h.eq(nil, tree.selected())
+					tree.preview()
+					tree.fork_selected()
+					h.ok(transcript_text():find("No entries in this session.", 1, true))
+				end
+				tree.reset()
+			end
+		end)
+		client.get_tree = real_get_tree
+		if not ok then
+			error(err, 0)
+		end
+	end,
+
+	["compaction blocks tree opening and session changes"] = function()
+		local real_notify = vim.notify
+		local notices = {}
+		vim.notify = function(message)
+			notices[#notices + 1] = message
+		end
+		local ok, err = pcall(function()
+			state.handle_event({ type = "compaction_start" })
+			h.eq(true, state.is_busy())
+			tree.open()
+			require("pim.sessions").clone()
+			h.eq(false, tree.is_open())
+			h.eq(2, #notices)
+			state.handle_event({ type = "compaction_end" })
+			h.eq(false, state.is_busy())
+		end)
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
+	end,
 	["tree renders session branches and locks the input"] = function()
 		start_pim()
 		tree.open()

@@ -2,6 +2,47 @@ local h = require("helpers")
 local tree = require("pim.session_tree")
 
 return {
+	["hidden parents promote visible descendants without changing source links"] = function()
+		local function node(kind, id, children)
+			return {
+				entry = { type = kind, id = id, parentId = "original", message = { role = "user", content = id } },
+				children = children,
+			}
+		end
+		local a = node("message", "a")
+		local b = node("message", "b", { node("message", "nested") })
+		local c = node("message", "c")
+		local data = {
+			node("branch_summary", "hidden-root", {
+				node("message", "root", {
+					node("compaction", "hidden", { node("branch_summary", "consecutive", { a, b }) }),
+					node("compaction", "empty"),
+					c,
+					node("branch_summary", "hidden-leaf"),
+				}),
+			}),
+		}
+		local original = vim.deepcopy(data)
+		local rows = tree.flatten(data, "hidden-leaf")
+		h.eq(
+			{ "  You: root", "  ├─ You: a", "  ├─ You: b", "  │  └─ You: nested", "  └─ You: c" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		h.eq(a.entry, rows[2].entry)
+		h.eq(b.entry, rows[3].entry)
+		h.eq("c", rows[5].id)
+		h.eq(5, #assert(tree.path(data, "a")))
+		h.eq(
+			{ "root", "a" },
+			vim.tbl_map(function(message)
+				return message.content
+			end, assert(tree.preview_messages(data, "a")))
+		)
+		h.eq(original, data)
+		h.eq({}, tree.flatten({ node("compaction", "one", { node("branch_summary", "two") }) }, "two"))
+	end,
 	["flatten renders branch order, labels, and the active leaf"] = function()
 		local rows = tree.flatten({
 			{
@@ -86,7 +127,7 @@ return {
 
 		local messages = assert(tree.preview_messages(data, "three"))
 		h.eq(
-			{ "user", "compactionSummary", "assistant" },
+			{ "user", "assistant" },
 			vim.tbl_map(function(message)
 				return message.role
 			end, messages)

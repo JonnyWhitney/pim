@@ -278,17 +278,13 @@ return {
 		h.eq({ "### notes", "", "remember this" }, block.lines)
 	end,
 
-	["branch summary folds its quote"] = function()
-		local block =
-			message_renderer.render({ role = "branchSummary", summary = "tried X\nit failed", fromId = "abc" })
-		h.eq({ "▸ branch summary", "> tried X", "> it failed" }, block.lines)
-		h.eq({ { first = 0, last = 2, kind = "summary" } }, block.folds)
-	end,
-
-	["compaction summary shows token count"] = function()
-		local block = message_renderer.render({ role = "compactionSummary", summary = "history", tokensBefore = 52000 })
-		h.eq({ "▸ compacted (52000 tokens before)", "> history" }, block.lines)
-		h.eq({ { first = 0, last = 1, kind = "summary" } }, block.folds)
+	["summary roles are omitted without placeholders or folds"] = function()
+		for _, role in ipairs({ "branchSummary", "compactionSummary" }) do
+			h.eq(
+				{ lines = {}, folds = {} },
+				message_renderer.render({ role = role, summary = "history", tokensBefore = 52000 })
+			)
+		end
 	end,
 
 	["unknown role renders a visible stub"] = function()
