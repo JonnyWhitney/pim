@@ -274,10 +274,7 @@ function M.scroll_transcript_to_bottom()
 	if not buf then
 		return
 	end
-	local line_count = vim.api.nvim_buf_line_count(buf)
-	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-		vim.api.nvim_win_set_cursor(win, { line_count, 0 })
-	end
+	require("pim.ui.transcript_view").resume(M.transcript_win(), buf)
 end
 
 return M
