@@ -74,10 +74,23 @@ return {
 		end, "streaming_submit")
 	end,
 
-	["rejects invalid show_thinking"] = function()
+	["fold settings are independently validated"] = function()
+		for _, name in ipairs({ "tool_calls", "tool_results", "thinking", "bash_output" }) do
+			for _, value in ipairs({ "folded", "open" }) do
+				h.eq(value, config.setup({ transcript = { folds = { [name] = value } } }).transcript.folds[name])
+			end
+			for _, value in ipairs({ false, "sometimes", "hidden" }) do
+				if name ~= "thinking" or value ~= "hidden" then
+					h.fails(function()
+						config.setup({ transcript = { folds = { [name] = value } } })
+					end, "transcript.folds." .. name)
+				end
+			end
+		end
+		h.eq("hidden", config.setup({ transcript = { folds = { thinking = "hidden" } } }).transcript.folds.thinking)
 		h.fails(function()
-			config.setup({ transcript = { show_thinking = "sometimes" } })
-		end, "show_thinking")
+			config.setup({ transcript = { folds = false } })
+		end, "transcript.folds")
 	end,
 
 	["rejects max_height below min_height"] = function()
@@ -133,7 +146,7 @@ return {
 				keymaps = { submit = "<CR><CR>", abort = "<C-c>" },
 				input = { min_height = 3, max_height = 15 },
 				streaming_submit = "followUp",
-				transcript = { tools_collapsed = false, show_thinking = "open" },
+				transcript = { folds = { tool_calls = "open", thinking = "open" } },
 				set_title = true,
 				debug = true,
 			})

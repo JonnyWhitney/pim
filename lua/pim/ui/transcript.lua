@@ -1,5 +1,6 @@
 local layout = require("pim.ui.layout")
 local view = require("pim.ui.transcript_view")
+local folds = require("pim.ui.transcript_folds")
 
 local M = {}
 
@@ -98,34 +99,6 @@ local function rebind(buf)
 	marked_buf = buf
 end
 
-local function fold_starts_closed(kind)
-	local cfg = require("pim.config").get().transcript
-	if kind == "thinking" then
-		return cfg.show_thinking ~= "open"
-	elseif kind == "tool" then
-		return cfg.tools_collapsed
-	end
-	return true
-end
-
-local function apply_folds(buf, block)
-	if not block.final or #block.folds == 0 then
-		return
-	end
-	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-		vim.api.nvim_win_call(win, function()
-			for _, fold in ipairs(block.folds) do
-				local first = block.srow + fold.first + 1
-				local last = block.srow + fold.last + 1
-				pcall(vim.api.nvim_command, ("%d,%dfold"):format(first, last))
-				if not fold_starts_closed(fold.kind) then
-					pcall(vim.api.nvim_command, ("%dfoldopen"):format(first))
-				end
-			end
-		end)
-	end
-end
-
 local function ranges(buf)
 	local result = {}
 	for index, block in ipairs(blocks) do
@@ -139,9 +112,6 @@ end
 
 function M.flush()
 	stop_timer()
-	if not next(dirty) then
-		return
-	end
 	local buf = layout.transcript_buf()
 	if not buf then
 		return
@@ -150,22 +120,23 @@ function M.flush()
 		rebind(buf)
 	end
 
+	folds.attach(buf, M.flush)
 	local saved = view.capture(buf, ranges(buf))
+	folds.capture(buf, dirty)
 
 	vim.bo[buf].modifiable = true
-	local written = {}
 	for index, block in ipairs(blocks) do
 		if dirty[block.key] then
 			write_block(buf, index)
-			dirty[block.key] = nil
-			written[#written + 1] = block
 		end
 	end
 	vim.bo[buf].modifiable = false
 
-	for _, block in ipairs(written) do
-		apply_folds(buf, block)
+	for _, block in ipairs(blocks) do
+		block.srow = mark_row(buf, block.mark)
 	end
+	folds.apply(buf, blocks, dirty)
+	dirty = {}
 
 	view.restore(saved, ranges(buf))
 end
@@ -190,7 +161,7 @@ function M.set(key, kind, rendered, opts)
 
 	dirty[key] = true
 	if opts and opts.final then
-		-- Folds need final text. Write it now before Neovim creates those folds.
+		-- Completed content is written without waiting for the streaming timer.
 		M.flush()
 	else
 		schedule_flush()
@@ -235,11 +206,13 @@ end
 function M.shutdown()
 	stop_timer()
 	view.shutdown()
+	folds.shutdown()
 end
 
 function M.reset()
 	stop_timer()
 	view.reset()
+	folds.reset()
 	blocks, by_key, dirty = {}, {}, {}
 	divider_count = 0
 	local buf = layout.transcript_buf()

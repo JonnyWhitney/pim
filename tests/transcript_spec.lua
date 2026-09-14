@@ -146,7 +146,7 @@ return {
 		h.eq({}, vim.api.nvim_buf_get_extmarks(buf, queue_ns, 0, -1, {}))
 	end,
 
-	["end-to-end: tool run starts call and result folds closed"] = function()
+	["end-to-end: tool run folds calls and leaves results open"] = function()
 		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "tool" } })
 		require("pim").start()
 		transcript.reset()
@@ -195,7 +195,7 @@ return {
 			"",
 		}, snapshot)
 		h.eq(7, call_fold, "tool call fold should be closed at its header")
-		h.eq(14, result_fold, "tool result fold should be closed at its header")
+		h.eq(-1, result_fold, "tool result fold should be open")
 	end,
 
 	["end-to-end: fake pi run renders user echo, assistant text, divider"] = function()

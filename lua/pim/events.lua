@@ -23,7 +23,7 @@ local tool_previews = {}
 
 local function render_opts()
 	return {
-		thinking = require("pim.config").get().transcript.show_thinking,
+		thinking = require("pim.config").get().transcript.folds.thinking,
 		tool_arguments = tool_arguments,
 	}
 end

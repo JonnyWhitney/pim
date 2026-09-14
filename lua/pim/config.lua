@@ -16,8 +16,12 @@ M.defaults = {
 	streaming_submit = "steer",
 	bash_passthrough = true,
 	transcript = {
-		tools_collapsed = true,
-		show_thinking = "folded",
+		folds = {
+			tool_calls = "folded",
+			tool_results = "open",
+			thinking = "folded",
+			bash_output = "open",
+		},
 	},
 	set_title = false,
 	debug = false,
@@ -78,9 +82,19 @@ local function validate(opts)
 	if opts.streaming_submit ~= "steer" and opts.streaming_submit ~= "followUp" then
 		fail('streaming_submit must be "steer" or "followUp"')
 	end
-	local thinking = opts.transcript.show_thinking
-	if thinking ~= "folded" and thinking ~= "open" and thinking ~= "hidden" then
-		fail('transcript.show_thinking must be "folded", "open", or "hidden"')
+	if type(opts.transcript.folds) ~= "table" then
+		fail("transcript.folds must be a table")
+	end
+	for name in pairs(M.defaults.transcript.folds) do
+		local value = opts.transcript.folds[name]
+		if value ~= "folded" and value ~= "open" and not (name == "thinking" and value == "hidden") then
+			fail(
+				"transcript.folds."
+					.. name
+					.. ' must be "folded" or "open"'
+					.. (name == "thinking" and ', or "hidden"' or "")
+			)
+		end
 	end
 	local input = opts.input
 	if type(input.min_height) ~= "number" or input.min_height < 1 then

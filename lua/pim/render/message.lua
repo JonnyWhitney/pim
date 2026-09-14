@@ -18,6 +18,7 @@ local function append_rendered(lines, folds, rendered)
 			first = fold.first + offset,
 			last = fold.last + offset,
 			kind = fold.kind,
+			id = fold.id,
 		}
 	end
 end
@@ -26,7 +27,7 @@ local function render_assistant(message, opts)
 	local lines = { "### pi", "" }
 	local folds = {}
 
-	for _, block in ipairs(message.content or {}) do
+	for index, block in ipairs(message.content or {}) do
 		local empty_thinking = block.type == "thinking" and not block.redacted and vim.trim(block.thinking or "") == ""
 		if block.type == "thinking" and (opts.thinking == "hidden" or empty_thinking) then
 			goto continue
@@ -38,7 +39,7 @@ local function render_assistant(message, opts)
 			local first = #lines
 			lines[#lines + 1] = "▸ thinking"
 			markdown.append_quoted(lines, block.redacted and "(redacted)" or block.thinking)
-			folds[#folds + 1] = { first = first, last = #lines - 1, kind = "thinking" }
+			folds[#folds + 1] = { first = first, last = #lines - 1, kind = "thinking", id = tostring(index) }
 		elseif block.type == "toolCall" then
 			append_rendered(lines, folds, tool.call(block))
 		elseif block.type == "text" then

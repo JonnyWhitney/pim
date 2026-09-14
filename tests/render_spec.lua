@@ -40,7 +40,7 @@ return {
 			{ type = "text", text = "answer" },
 		}))
 		h.eq({ "### pi", "", "▸ thinking", "> step one", "> step two", "", "answer" }, block.lines)
-		h.eq({ { first = 2, last = 4, kind = "thinking" } }, block.folds)
+		h.eq({ { first = 2, last = 4, kind = "thinking", id = "1" } }, block.folds)
 	end,
 
 	["redacted thinking hides the payload"] = function()
@@ -65,7 +65,7 @@ return {
 			"}",
 			"```",
 		}, block.lines)
-		h.eq({ { first = 2, last = 7, kind = "tool" } }, block.folds)
+		h.eq({ { first = 2, last = 7, kind = "tool_calls", id = "t1" } }, block.folds)
 	end,
 
 	["assistant toolCall formats nested arguments as readable JSON"] = function()
@@ -134,7 +134,7 @@ return {
 			content = { { type = "text", text = "file-a\nfile-b" } },
 		})
 		h.eq({ "▸ result(bash)", "```", "file-a", "file-b", "```" }, block.lines)
-		h.eq({ { first = 0, last = 4, kind = "tool" } }, block.folds)
+		h.eq({ { first = 0, last = 4, kind = "tool_results" } }, block.folds)
 	end,
 
 	["tool result error is marked in the header"] = function()
@@ -229,7 +229,7 @@ return {
 		})
 		h.eq("▸ ! make build [exit 2]", block.lines[1])
 		h.eq("[output truncated]", block.lines[#block.lines - 1])
-		h.eq({ { first = 0, last = #block.lines - 1, kind = "tool" } }, block.folds)
+		h.eq({ { first = 0, last = #block.lines - 1, kind = "bash_output" } }, block.folds)
 	end,
 
 	["newline-terminated output does not gain a blank line in the fence"] = function()
@@ -342,7 +342,7 @@ return {
 			result = { content = { { type = "text", text = "file-a" } } },
 		})
 		h.eq({ "▸ result(bash) [running]", "```", "file-a", "```" }, block.lines)
-		h.eq({ { first = 0, last = 3, kind = "tool" } }, block.folds)
+		h.eq({ { first = 0, last = 3, kind = "tool_results" } }, block.folds)
 	end,
 
 	["pending edit execution shows its preview"] = function()

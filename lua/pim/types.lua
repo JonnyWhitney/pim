@@ -187,7 +187,8 @@
 ---@class PimRenderedFold
 ---@field first integer
 ---@field last integer
----@field kind string
+---@field kind "tool_calls"|"tool_results"|"thinking"|"bash_output"
+---@field id string|nil
 
 ---@class PimRenderedBlock
 ---@field lines string[]

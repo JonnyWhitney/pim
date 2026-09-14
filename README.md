@@ -62,8 +62,12 @@ for Bash. Edit results show a diff, write results show syntax-highlighted file
 content, and Bash results keep the complete command separate from its output.
 PIM can show the proposed operation while a permission dialog is open. This
 preview is display-only and does not add a message to the model context.
-Completed tool calls and their results start folded by default. Use `<Tab>` to
-toggle a fold.
+Tool calls are folded by default, including during execution. Results, including
+edit diffs, and `!` output are left open. Thinking is folded by default.
+Each default can be changed through `transcript.folds`; thinking can also be
+hidden. Folds can be toggled with `<Tab>` or native Neovim fold commands.
+Manual choices are preserved per window during updates. Defaults are reapplied
+when history is reloaded or a buffer or window is recreated.
 
 ## Commands
 
@@ -173,8 +177,12 @@ require("pim").setup({
   streaming_submit = "steer", -- Or "followUp".
   bash_passthrough = true, -- Run prompts that start with ! or !! as shell commands.
   transcript = {
-    tools_collapsed = true, -- Fold completed tool calls and results.
-    show_thinking = "folded", -- "folded", "open", or "hidden".
+    folds = {
+      tool_calls = "folded",
+      tool_results = "open",
+      thinking = "folded", -- "folded", "open", or "hidden".
+      bash_output = "open",
+    },
   },
   set_title = false, -- Allow extensions to set the terminal title.
   debug = false, -- Record raw RPC traffic for :PiLog.
