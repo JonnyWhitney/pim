@@ -25,6 +25,71 @@ local function transcript_text()
 end
 
 return {
+	["hidden leaves and entirely hidden trees keep selection safe"] = function()
+		layout.open()
+		local real_get_tree = client.get_tree
+		local ok, err = pcall(function()
+			for _, visible in ipairs({ true, false }) do
+				local hidden = { entry = { type = "compaction", id = "hidden" } }
+				local nodes = visible
+						and {
+							{
+								entry = {
+									type = "message",
+									id = "prompt",
+									message = { role = "user", content = "Visible prompt" },
+								},
+								children = { hidden },
+							},
+						}
+					or { hidden }
+				---@diagnostic disable-next-line: duplicate-set-field
+				client.get_tree = function(callback)
+					callback(true, { tree = nodes, leafId = "hidden" })
+				end
+				tree.open()
+				if visible then
+					h.eq("prompt", tree.selected().id)
+					tree.preview()
+					h.ok(transcript_text():find("Visible prompt", 1, true))
+					tree.return_to_tree()
+					h.eq("prompt", tree.selected().id)
+				else
+					h.eq(nil, tree.selected())
+					tree.preview()
+					tree.fork_selected()
+					h.ok(transcript_text():find("No entries in this session.", 1, true))
+				end
+				tree.reset()
+			end
+		end)
+		client.get_tree = real_get_tree
+		if not ok then
+			error(err, 0)
+		end
+	end,
+
+	["compaction blocks tree opening and session changes"] = function()
+		local real_notify = vim.notify
+		local notices = {}
+		vim.notify = function(message)
+			notices[#notices + 1] = message
+		end
+		local ok, err = pcall(function()
+			state.handle_event({ type = "compaction_start" })
+			h.eq(true, state.is_busy())
+			tree.open()
+			require("pim.sessions").clone()
+			h.eq(false, tree.is_open())
+			h.eq(2, #notices)
+			state.handle_event({ type = "compaction_end" })
+			h.eq(false, state.is_busy())
+		end)
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
+	end,
 	["tree renders session branches and locks the input"] = function()
 		start_pim()
 		tree.open()
@@ -62,6 +127,15 @@ return {
 			return transcript_text():find("# pi tree preview", 1, true) ~= nil
 		end, "the preview to open", 5000)
 		h.ok(transcript_text():find("Fix the parser error", 1, true), "preview shows the selected conversation")
+		local marks = vim.api.nvim_buf_get_extmarks(
+			assert(layout.transcript_buf()),
+			vim.api.nvim_get_namespaces()["pim-transcript-decorations"],
+			0,
+			-1,
+			{ details = true }
+		)
+		h.ok(#marks > 0, "preview messages are decorated through the shared transcript store")
+		h.eq("markdown", vim.bo[assert(layout.transcript_buf())].filetype)
 		h.eq(true, tree.is_open(), "preview keeps tree mode active")
 		h.eq(false, vim.bo[assert(layout.input_buf())].modifiable, "preview keeps the input locked")
 
@@ -70,6 +144,17 @@ return {
 			return transcript_text():find("# pi tree", 1, true) ~= nil
 		end, "the tree to return", 5000)
 		h.eq("tree-3", tree.selected().id, "the selected entry is preserved")
+		h.eq(
+			{},
+			vim.api.nvim_buf_get_extmarks(
+				assert(layout.transcript_buf()),
+				vim.api.nvim_get_namespaces()["pim-transcript-decorations"],
+				0,
+				-1,
+				{}
+			),
+			"preview decorations are cleared on return to the tree"
+		)
 	end,
 
 	["r forks the selected user prompt"] = function()

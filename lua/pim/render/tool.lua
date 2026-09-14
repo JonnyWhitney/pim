@@ -60,7 +60,7 @@ function M.call(block)
 	local folds = {}
 	if type(block.arguments) == "table" and not vim.tbl_isempty(block.arguments) then
 		local _, last = markdown.append_fenced(lines, markdown.format_json(block.arguments), "json")
-		folds[1] = { first = 0, last = last, kind = "tool" }
+		folds[1] = { first = 0, last = last, kind = "tool_calls", id = block.id }
 	end
 	return { lines = lines, folds = folds }
 end
@@ -168,7 +168,7 @@ function M.execution(exec)
 	local folds = {}
 	local last = append_output(lines, exec, result_text(exec.result))
 	if last then
-		folds[1] = { first = 0, last = last, kind = "tool" }
+		folds[1] = { first = 0, last = last, kind = "tool_results" }
 	end
 	return { lines = lines, folds = folds }
 end
@@ -199,7 +199,7 @@ function M.bash_execution(message)
 	end
 	if vim.trim(output) ~= "" then
 		local _, last = markdown.append_fenced(lines, output)
-		folds[1] = { first = 0, last = last, kind = "tool" }
+		folds[1] = { first = 0, last = last, kind = "bash_output" }
 	end
 	return { lines = lines, folds = folds }
 end

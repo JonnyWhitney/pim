@@ -187,11 +187,17 @@
 ---@class PimRenderedFold
 ---@field first integer
 ---@field last integer
----@field kind string
+---@field kind "tool_calls"|"tool_results"|"thinking"|"bash_output"
+---@field id string|nil
+
+---@class PimRenderedHeader
+---@field role "user"|"assistant"|"custom"
+---@field row integer Zero-based header row within the block.
 
 ---@class PimRenderedBlock
 ---@field lines string[]
 ---@field folds PimRenderedFold[]
+---@field header PimRenderedHeader|nil
 
 ---@class PimTranscriptBlock : PimRenderedBlock
 ---@field key string

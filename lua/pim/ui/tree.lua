@@ -101,7 +101,7 @@ local function render_preview(messages)
 		lines = { "# pi tree preview", "q: return to tree", "Input is disabled while the tree is open." },
 		folds = {},
 	}, { final = true })
-	local opts = { thinking = require("pim.config").get().transcript.show_thinking }
+	local opts = { thinking = require("pim.config").get().transcript.folds.thinking }
 	for index, message in ipairs(messages) do
 		transcript.set(
 			"tree-preview-" .. index,

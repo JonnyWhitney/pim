@@ -23,7 +23,7 @@ local tool_previews = {}
 
 local function render_opts()
 	return {
-		thinking = require("pim.config").get().transcript.show_thinking,
+		thinking = require("pim.config").get().transcript.folds.thinking,
 		tool_arguments = tool_arguments,
 	}
 end
@@ -251,7 +251,7 @@ function M.handle(event)
 	elseif kind == "queue_update" then
 		transcript.set_queue(event.steering, event.followUp)
 	elseif kind == "agent_settled" then
-		transcript.divider()
+		transcript.flush()
 		state.poll_stats()
 	elseif kind == "compaction_end" then
 		state.poll_stats()

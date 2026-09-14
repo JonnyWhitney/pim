@@ -4,10 +4,14 @@ local tool = require("pim.render.tool")
 
 local M = {}
 
+local function chat_block(role, lines, folds)
+	return { lines = lines, folds = folds or {}, header = { role = role, row = 0 } }
+end
+
 local function render_user(message)
 	local lines = { "### You", "" }
 	markdown.append(lines, content.to_text(message.content))
-	return { lines = lines, folds = {} }
+	return chat_block("user", lines)
 end
 
 local function append_rendered(lines, folds, rendered)
@@ -18,6 +22,7 @@ local function append_rendered(lines, folds, rendered)
 			first = fold.first + offset,
 			last = fold.last + offset,
 			kind = fold.kind,
+			id = fold.id,
 		}
 	end
 end
@@ -26,7 +31,7 @@ local function render_assistant(message, opts)
 	local lines = { "### pi", "" }
 	local folds = {}
 
-	for _, block in ipairs(message.content or {}) do
+	for index, block in ipairs(message.content or {}) do
 		local empty_thinking = block.type == "thinking" and not block.redacted and vim.trim(block.thinking or "") == ""
 		if block.type == "thinking" and (opts.thinking == "hidden" or empty_thinking) then
 			goto continue
@@ -38,7 +43,7 @@ local function render_assistant(message, opts)
 			local first = #lines
 			lines[#lines + 1] = "▸ thinking"
 			markdown.append_quoted(lines, block.redacted and "(redacted)" or block.thinking)
-			folds[#folds + 1] = { first = first, last = #lines - 1, kind = "thinking" }
+			folds[#folds + 1] = { first = first, last = #lines - 1, kind = "thinking", id = tostring(index) }
 		elseif block.type == "toolCall" then
 			append_rendered(lines, folds, tool.call(block))
 		elseif block.type == "text" then
@@ -60,7 +65,7 @@ local function render_assistant(message, opts)
 		end
 	end
 
-	return { lines = lines, folds = folds }
+	return chat_block("assistant", lines, folds)
 end
 
 local function render_tool_result(message, opts)
@@ -82,23 +87,7 @@ local function render_custom(message)
 	end
 	local lines = { ("### %s"):format(message.customType or "extension"), "" }
 	markdown.append(lines, content.to_text(message.content))
-	return { lines = lines, folds = {} }
-end
-
-local function render_branch_summary(message)
-	local lines = { "▸ branch summary" }
-	markdown.append_quoted(lines, message.summary or "")
-	return { lines = lines, folds = { { first = 0, last = #lines - 1, kind = "summary" } } }
-end
-
-local function render_compaction_summary(message)
-	local header = "▸ compacted"
-	if message.tokensBefore then
-		header = ("▸ compacted (%d tokens before)"):format(message.tokensBefore)
-	end
-	local lines = { header }
-	markdown.append_quoted(lines, message.summary or "")
-	return { lines = lines, folds = { { first = 0, last = #lines - 1, kind = "summary" } } }
+	return chat_block("custom", lines)
 end
 
 local renderers = {
@@ -107,14 +96,15 @@ local renderers = {
 	toolResult = render_tool_result,
 	bashExecution = tool.bash_execution,
 	custom = render_custom,
-	branchSummary = render_branch_summary,
-	compactionSummary = render_compaction_summary,
 }
 
 ---@param message PimMessage|nil
 ---@param opts { thinking: "folded"|"open"|"hidden"|nil, tool_arguments: table<string, table>|nil }|nil
 ---@return PimRenderedBlock
 function M.render(message, opts)
+	if message and (message.role == "branchSummary" or message.role == "compactionSummary") then
+		return { lines = {}, folds = {} }
+	end
 	local renderer = message and renderers[message.role]
 	if not renderer then
 		return {

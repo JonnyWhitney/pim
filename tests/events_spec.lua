@@ -33,6 +33,22 @@ local function transcript_text()
 end
 
 return {
+	["summary events and history add no transcript content or spacing"] = function()
+		layout.open()
+		local user = { role = "user", content = "before" }
+		local assistant = { role = "assistant", content = { { type = "text", text = "after" } } }
+		events.load_messages({ user, assistant })
+		local expected = transcript_text()
+		local branch = { role = "branchSummary", summary = "hidden branch" }
+		local compaction = { role = "compactionSummary", summary = "hidden compaction" }
+		events.load_messages({ user, branch, compaction, assistant })
+		h.eq(expected, transcript_text())
+		for _, message in ipairs({ branch, compaction }) do
+			events.handle({ type = "message_start", message = message })
+			events.handle({ type = "message_end", message = message })
+		end
+		h.eq(expected, transcript_text())
+	end,
 	["text deltas build a live message and message_end replaces it"] = function()
 		layout.open()
 		events.reset()
@@ -283,7 +299,7 @@ return {
 		h.eq(nil, handle_all({ {}, { type = "totally_unknown_event" }, { type = 42 } }))
 	end,
 
-	["a retried run draws one divider, not one per attempt"] = function()
+	["settling a retried run adds no literal divider"] = function()
 		layout.open()
 
 		local failure = handle_all({
@@ -297,11 +313,13 @@ return {
 		transcript.flush()
 
 		h.eq(nil, failure)
-		h.eq(0, count_dividers(), "no boundary is drawn until the run has settled")
+		h.eq(0, count_dividers())
+		local before = transcript_text()
 
 		events.handle({ type = "agent_settled" })
 		transcript.flush()
-		h.eq(1, count_dividers(), "exactly one boundary for the whole retried turn")
+		h.eq(0, count_dividers())
+		h.eq(before, transcript_text(), "settling changes no buffer text")
 	end,
 
 	["a hostile stream leaves the connection usable"] = function()

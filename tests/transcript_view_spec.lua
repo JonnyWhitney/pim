@@ -41,6 +41,57 @@ local function submission(busy, behavior)
 end
 
 return {
+	["message decorations preserve reading position through updates and configuration changes"] = function()
+		layout.open()
+		local renderer = require("pim.render.message")
+		local function message(key, role, text)
+			local content = role == "assistant" and { { type = "text", text = text } } or text
+			transcript.set(key, "message", renderer.render({ role = role, content = content }), { final = true })
+		end
+		message("user", "user", "question")
+		message("assistant", "assistant", string.rep("answer\n", 40))
+		local win = assert(layout.transcript_win())
+		vim.api.nvim_win_set_cursor(win, { 7, 0 })
+		observe()
+		message("user", "user", "question\nmore context")
+		h.eq(8, cursor(win), "the body-relative reading position follows the preceding update")
+		for _, enabled in ipairs({ false, true }) do
+			require("pim.config").setup({
+				transcript = { dividers = enabled, header_highlights = enabled and {} or false },
+			})
+			transcript.flush()
+			vim.api.nvim_exec_autocmds("WinResized", {})
+			h.eq(8, cursor(win))
+		end
+		view.resume(win, assert(layout.transcript_buf()))
+		message("assistant", "assistant", string.rep("answer\n", 50))
+		h.eq(vim.api.nvim_buf_line_count(assert(layout.transcript_buf())) - 1, cursor(win))
+	end,
+	["growing running folds preserve reading and following"] = function()
+		local win, buf = fresh()
+		local function streaming(key, kind, count)
+			local lines = { key }
+			for i = 2, count do
+				lines[i] = "output " .. i
+			end
+			transcript.set(key, "message", { lines = lines, folds = { { first = 0, last = count - 1, kind = kind } } })
+			transcript.flush()
+		end
+		streaming("call", "tool_calls", 10)
+		h.eq(6, cursor(win), "following is positioned at the closed call header")
+		streaming("call", "tool_calls", 20)
+		h.eq(6, cursor(win))
+		streaming("result", "tool_results", 10)
+		h.eq(36, cursor(win), "following reaches the open result end")
+		vim.api.nvim_win_set_cursor(win, { 2, 0 })
+		observe()
+		streaming("call", "tool_calls", 30)
+		streaming("result", "tool_results", 20)
+		h.eq(2, cursor(win), "older reading is not moved to the end")
+		view.resume(win, buf)
+		streaming("result", "tool_results", 30)
+		h.eq(vim.api.nvim_buf_line_count(buf) - 1, cursor(win))
+	end,
 	["cursor visibility adjustments after wrapped growth do not resume follow"] = function()
 		local win = fresh()
 		vim.api.nvim_set_current_win(win)

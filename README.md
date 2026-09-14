@@ -62,8 +62,12 @@ for Bash. Edit results show a diff, write results show syntax-highlighted file
 content, and Bash results keep the complete command separate from its output.
 PIM can show the proposed operation while a permission dialog is open. This
 preview is display-only and does not add a message to the model context.
-Completed tool calls and their results start folded by default. Use `<Tab>` to
-toggle a fold.
+Tool calls are folded by default, including during execution. Results, including
+edit diffs, and `!` output are left open. Thinking is folded by default.
+Each default can be changed through `transcript.folds`; thinking can also be
+hidden. Folds can be toggled with `<Tab>` or native Neovim fold commands.
+Manual choices are preserved per window during updates. Defaults are reapplied
+when history is reloaded or a buffer or window is recreated.
 
 ## Commands
 
@@ -91,6 +95,9 @@ toggle a fold.
 prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
 fork a selected user prompt, and `c` to clone the active branch. In a preview,
 `q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
+Branch-summary and compaction entries are hidden. Their visible descendants
+are shown under the nearest visible ancestor. Summary content is omitted from
+previews and transcripts. Saved sessions and internal tree links are preserved.
 
 pim blocks new, switch, fork, and clone session actions while Pi is streaming,
 compacting, running Bash, or retrying. An agent run remains busy until Pi sends
@@ -170,8 +177,18 @@ require("pim").setup({
   streaming_submit = "steer", -- Or "followUp".
   bash_passthrough = true, -- Run prompts that start with ! or !! as shell commands.
   transcript = {
-    tools_collapsed = true, -- Fold completed tool calls and results.
-    show_thinking = "folded", -- "folded", "open", or "hidden".
+    dividers = true,
+    header_highlights = { -- Or false to retain only Markdown header colors.
+      user = "PimUserHeader",
+      assistant = "PimAssistantHeader",
+      custom = "PimCustomHeader",
+    },
+    folds = {
+      tool_calls = "folded",
+      tool_results = "open",
+      thinking = "folded", -- "folded", "open", or "hidden".
+      bash_output = "open",
+    },
   },
   set_title = false, -- Allow extensions to set the terminal title.
   debug = false, -- Record raw RPC traffic for :PiLog.
@@ -179,6 +196,39 @@ require("pim").setup({
 ```
 
 Invalid setting values cause an error. Unknown setting keys cause a warning that includes the full key path.
+
+### Message boundaries
+
+Chat headers are colored by role. Divider lines are displayed on the blank
+separator before chat headers, not around internal tool blocks. No divider text
+is added to copied Markdown. The Markdown filetype, headings, and code fences
+are retained in transcripts and tree previews.
+
+Dividers can be disabled with `transcript.dividers = false`. Extra header colors
+can be disabled with `transcript.header_highlights = false`. Ordinary Markdown
+highlighting is retained in both cases.
+
+These default highlight links are supplied without overwriting user definitions:
+
+| Group | Default link |
+| --- | --- |
+| `PimUserHeader` | `Identifier` |
+| `PimAssistantHeader` | `Statement` |
+| `PimCustomHeader` | `Special` |
+| `PimDivider` | `Comment` |
+
+Each `header_highlights` value can be set to an existing Neovim highlight-group
+name. Partial overrides are merged with the defaults. Alternatively, the pim
+groups can be customized directly. For example, a user-header color can be
+applied now and reapplied after colorscheme changes:
+
+```lua
+local function set_pim_colors()
+  vim.api.nvim_set_hl(0, "PimUserHeader", { fg = "#7dcfff", bold = true })
+end
+vim.api.nvim_create_autocmd("ColorScheme", { callback = set_pim_colors })
+set_pim_colors()
+```
 
 The winbar shows the pi provider, model, thinking level, configuration
 directory, and context usage. Context usage has the form `ctx:12k/100k (12%)`
