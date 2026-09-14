@@ -11,6 +11,19 @@ local function assistant(content, extra)
 end
 
 return {
+	["only chat role headers receive structural metadata"] = function()
+		for _, role in ipairs({ "user", "assistant", "custom" }) do
+			local text = "### You\n```markdown\n### pi\n```"
+			local content = role == "assistant" and { { type = "text", text = text } } or text
+			local block = message_renderer.render({ role = role, content = content })
+			h.eq({ role = role, row = 0 }, block.header)
+			h.eq("### You", block.lines[3], "body headings are preserved as body content")
+		end
+		for _, role in ipairs({ "toolResult", "bashExecution", "notification", "branchSummary", "compactionSummary" }) do
+			h.eq(nil, message_renderer.render({ role = role, content = "### You" }).header)
+		end
+		h.eq(nil, message_renderer.render({ role = "custom", display = false }).header)
+	end,
 	["user message with plain string content"] = function()
 		local block = message_renderer.render({ role = "user", content = "fix the bug\nin foo.ts" })
 		h.eq({ "### You", "", "fix the bug", "in foo.ts" }, block.lines)

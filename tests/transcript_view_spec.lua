@@ -41,6 +41,32 @@ local function submission(busy, behavior)
 end
 
 return {
+	["message decorations preserve reading position through updates and configuration changes"] = function()
+		layout.open()
+		local renderer = require("pim.render.message")
+		local function message(key, role, text)
+			local content = role == "assistant" and { { type = "text", text = text } } or text
+			transcript.set(key, "message", renderer.render({ role = role, content = content }), { final = true })
+		end
+		message("user", "user", "question")
+		message("assistant", "assistant", string.rep("answer\n", 40))
+		local win = assert(layout.transcript_win())
+		vim.api.nvim_win_set_cursor(win, { 7, 0 })
+		observe()
+		message("user", "user", "question\nmore context")
+		h.eq(8, cursor(win), "the body-relative reading position follows the preceding update")
+		for _, enabled in ipairs({ false, true }) do
+			require("pim.config").setup({
+				transcript = { dividers = enabled, header_highlights = enabled and {} or false },
+			})
+			transcript.flush()
+			vim.api.nvim_exec_autocmds("WinResized", {})
+			h.eq(8, cursor(win))
+		end
+		view.resume(win, assert(layout.transcript_buf()))
+		message("assistant", "assistant", string.rep("answer\n", 50))
+		h.eq(vim.api.nvim_buf_line_count(assert(layout.transcript_buf())) - 1, cursor(win))
+	end,
 	["growing running folds preserve reading and following"] = function()
 		local win, buf = fresh()
 		local function streaming(key, kind, count)

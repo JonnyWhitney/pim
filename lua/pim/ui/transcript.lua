@@ -1,6 +1,7 @@
 local layout = require("pim.ui.layout")
 local view = require("pim.ui.transcript_view")
 local folds = require("pim.ui.transcript_folds")
+local decorations = require("pim.ui.transcript_decorations")
 
 local M = {}
 
@@ -121,6 +122,7 @@ function M.flush()
 	end
 
 	folds.attach(buf, M.flush)
+	decorations.attach(buf, M.flush)
 	local saved = view.capture(buf, ranges(buf))
 	folds.capture(buf, dirty)
 
@@ -136,6 +138,7 @@ function M.flush()
 		block.srow = mark_row(buf, block.mark)
 	end
 	folds.apply(buf, blocks, dirty)
+	decorations.apply(buf, blocks)
 	dirty = {}
 
 	view.restore(saved, ranges(buf))
@@ -157,6 +160,7 @@ function M.set(key, kind, rendered, opts)
 	end
 	block.lines = rendered.lines
 	block.folds = rendered.folds or {}
+	block.header = rendered.header
 	block.final = (opts and opts.final) or block.final
 
 	dirty[key] = true
@@ -199,20 +203,25 @@ function M.foldtext()
 end
 
 function M.divider(text)
+	if not text or text == "" then
+		return
+	end
 	divider_count = divider_count + 1
-	M.set("divider-" .. divider_count, "divider", { lines = { text or "---" }, folds = {} }, { final = true })
+	M.set("divider-" .. divider_count, "divider", { lines = { text }, folds = {} }, { final = true })
 end
 
 function M.shutdown()
 	stop_timer()
 	view.shutdown()
 	folds.shutdown()
+	decorations.shutdown()
 end
 
 function M.reset()
 	stop_timer()
 	view.reset()
 	folds.reset()
+	decorations.reset()
 	blocks, by_key, dirty = {}, {}, {}
 	divider_count = 0
 	local buf = layout.transcript_buf()

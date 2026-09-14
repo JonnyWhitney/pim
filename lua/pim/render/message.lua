@@ -4,10 +4,14 @@ local tool = require("pim.render.tool")
 
 local M = {}
 
+local function chat_block(role, lines, folds)
+	return { lines = lines, folds = folds or {}, header = { role = role, row = 0 } }
+end
+
 local function render_user(message)
 	local lines = { "### You", "" }
 	markdown.append(lines, content.to_text(message.content))
-	return { lines = lines, folds = {} }
+	return chat_block("user", lines)
 end
 
 local function append_rendered(lines, folds, rendered)
@@ -61,7 +65,7 @@ local function render_assistant(message, opts)
 		end
 	end
 
-	return { lines = lines, folds = folds }
+	return chat_block("assistant", lines, folds)
 end
 
 local function render_tool_result(message, opts)
@@ -83,7 +87,7 @@ local function render_custom(message)
 	end
 	local lines = { ("### %s"):format(message.customType or "extension"), "" }
 	markdown.append(lines, content.to_text(message.content))
-	return { lines = lines, folds = {} }
+	return chat_block("custom", lines)
 end
 
 local renderers = {

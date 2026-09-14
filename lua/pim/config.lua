@@ -16,6 +16,12 @@ M.defaults = {
 	streaming_submit = "steer",
 	bash_passthrough = true,
 	transcript = {
+		dividers = true,
+		header_highlights = {
+			user = "PimUserHeader",
+			assistant = "PimAssistantHeader",
+			custom = "PimCustomHeader",
+		},
 		folds = {
 			tool_calls = "folded",
 			tool_results = "open",
@@ -81,6 +87,21 @@ local function validate(opts)
 	end
 	if opts.streaming_submit ~= "steer" and opts.streaming_submit ~= "followUp" then
 		fail('streaming_submit must be "steer" or "followUp"')
+	end
+	if type(opts.transcript.dividers) ~= "boolean" then
+		fail("transcript.dividers must be a boolean")
+	end
+	local headers = opts.transcript.header_highlights
+	if headers ~= false then
+		if type(headers) ~= "table" then
+			fail("transcript.header_highlights must be a table or false")
+		end
+		for _, role in ipairs({ "user", "assistant", "custom" }) do
+			local name = headers[role]
+			if type(name) ~= "string" or #name > 200 or not name:match("^[A-Za-z0-9_.@%-]+$") then
+				fail("transcript.header_highlights." .. role .. " must be a Neovim highlight-group name")
+			end
+		end
 	end
 	if type(opts.transcript.folds) ~= "table" then
 		fail("transcript.folds must be a table")

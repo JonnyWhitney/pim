@@ -127,6 +127,15 @@ return {
 			return transcript_text():find("# pi tree preview", 1, true) ~= nil
 		end, "the preview to open", 5000)
 		h.ok(transcript_text():find("Fix the parser error", 1, true), "preview shows the selected conversation")
+		local marks = vim.api.nvim_buf_get_extmarks(
+			assert(layout.transcript_buf()),
+			vim.api.nvim_get_namespaces()["pim-transcript-decorations"],
+			0,
+			-1,
+			{ details = true }
+		)
+		h.ok(#marks > 0, "preview messages are decorated through the shared transcript store")
+		h.eq("markdown", vim.bo[assert(layout.transcript_buf())].filetype)
 		h.eq(true, tree.is_open(), "preview keeps tree mode active")
 		h.eq(false, vim.bo[assert(layout.input_buf())].modifiable, "preview keeps the input locked")
 
@@ -135,6 +144,17 @@ return {
 			return transcript_text():find("# pi tree", 1, true) ~= nil
 		end, "the tree to return", 5000)
 		h.eq("tree-3", tree.selected().id, "the selected entry is preserved")
+		h.eq(
+			{},
+			vim.api.nvim_buf_get_extmarks(
+				assert(layout.transcript_buf()),
+				vim.api.nvim_get_namespaces()["pim-transcript-decorations"],
+				0,
+				-1,
+				{}
+			),
+			"preview decorations are cleared on return to the tree"
+		)
 	end,
 
 	["r forks the selected user prompt"] = function()

@@ -26,6 +26,41 @@ local function with_agent_dir(directory, fn)
 end
 
 return {
+	["message decorations can be independently configured or disabled"] = function()
+		local opts =
+			config.setup({ transcript = { dividers = false, header_highlights = { user = "@markup.heading.3" } } })
+		h.eq(false, opts.transcript.dividers)
+		h.eq("@markup.heading.3", opts.transcript.header_highlights.user)
+		h.eq("PimAssistantHeader", opts.transcript.header_highlights.assistant)
+		h.eq("PimCustomHeader", opts.transcript.header_highlights.custom)
+		h.eq(nil, setup_capturing_warning({ transcript = { header_highlights = false } }))
+		h.eq(false, config.get().transcript.header_highlights)
+		h.eq(true, config.get().transcript.dividers)
+	end,
+
+	["invalid divider and header settings are rejected"] = function()
+		for _, value in ipairs({ "yes", 1, {} }) do
+			h.fails(function()
+				config.setup({ transcript = { dividers = value } })
+			end, "transcript.dividers must be a boolean")
+		end
+		for _, value in ipairs({ true, "Comment", 1 }) do
+			h.fails(function()
+				config.setup({ transcript = { header_highlights = value } })
+			end, "transcript.header_highlights must be a table or false")
+		end
+		for _, role in ipairs({ "user", "assistant", "custom" }) do
+			for _, name in ipairs({ "", "two words", "bad\nname", "bad/name", string.rep("x", 201), false, 1 }) do
+				h.fails(function()
+					config.setup({ transcript = { header_highlights = { [role] = name } } })
+				end, "transcript.header_highlights." .. role)
+			end
+		end
+		h.eq(
+			"custom-header",
+			config.setup({ transcript = { header_highlights = { custom = "custom-header" } } }).transcript.header_highlights.custom
+		)
+	end,
 	["pi config directory uses PI_CODING_AGENT_DIR and shortens home"] = function()
 		with_agent_dir(vim.fs.joinpath(vim.fn.expand("~"), ".pi-personal", "agent"), function()
 			h.eq("~/.pi-personal/agent", config.pi_config_dir())

@@ -299,7 +299,7 @@ return {
 		h.eq(nil, handle_all({ {}, { type = "totally_unknown_event" }, { type = 42 } }))
 	end,
 
-	["a retried run draws one divider, not one per attempt"] = function()
+	["settling a retried run adds no literal divider"] = function()
 		layout.open()
 
 		local failure = handle_all({
@@ -313,11 +313,13 @@ return {
 		transcript.flush()
 
 		h.eq(nil, failure)
-		h.eq(0, count_dividers(), "no boundary is drawn until the run has settled")
+		h.eq(0, count_dividers())
+		local before = transcript_text()
 
 		events.handle({ type = "agent_settled" })
 		transcript.flush()
-		h.eq(1, count_dividers(), "exactly one boundary for the whole retried turn")
+		h.eq(0, count_dividers())
+		h.eq(before, transcript_text(), "settling changes no buffer text")
 	end,
 
 	["a hostile stream leaves the connection usable"] = function()

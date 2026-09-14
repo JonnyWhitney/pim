@@ -177,6 +177,12 @@ require("pim").setup({
   streaming_submit = "steer", -- Or "followUp".
   bash_passthrough = true, -- Run prompts that start with ! or !! as shell commands.
   transcript = {
+    dividers = true,
+    header_highlights = { -- Or false to retain only Markdown header colors.
+      user = "PimUserHeader",
+      assistant = "PimAssistantHeader",
+      custom = "PimCustomHeader",
+    },
     folds = {
       tool_calls = "folded",
       tool_results = "open",
@@ -190,6 +196,39 @@ require("pim").setup({
 ```
 
 Invalid setting values cause an error. Unknown setting keys cause a warning that includes the full key path.
+
+### Message boundaries
+
+Chat headers are colored by role. Divider lines are displayed on the blank
+separator before chat headers, not around internal tool blocks. No divider text
+is added to copied Markdown. The Markdown filetype, headings, and code fences
+are retained in transcripts and tree previews.
+
+Dividers can be disabled with `transcript.dividers = false`. Extra header colors
+can be disabled with `transcript.header_highlights = false`. Ordinary Markdown
+highlighting is retained in both cases.
+
+These default highlight links are supplied without overwriting user definitions:
+
+| Group | Default link |
+| --- | --- |
+| `PimUserHeader` | `Identifier` |
+| `PimAssistantHeader` | `Statement` |
+| `PimCustomHeader` | `Special` |
+| `PimDivider` | `Comment` |
+
+Each `header_highlights` value can be set to an existing Neovim highlight-group
+name. Partial overrides are merged with the defaults. Alternatively, the pim
+groups can be customized directly. For example, a user-header color can be
+applied now and reapplied after colorscheme changes:
+
+```lua
+local function set_pim_colors()
+  vim.api.nvim_set_hl(0, "PimUserHeader", { fg = "#7dcfff", bold = true })
+end
+vim.api.nvim_create_autocmd("ColorScheme", { callback = set_pim_colors })
+set_pim_colors()
+```
 
 The winbar shows the pi provider, model, thinking level, configuration
 directory, and context usage. Context usage has the form `ctx:12k/100k (12%)`

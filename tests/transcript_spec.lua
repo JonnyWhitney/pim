@@ -58,11 +58,15 @@ return {
 		h.eq({ "done", "" }, buffer_lines())
 	end,
 
-	["divider appends a rule"] = function()
+	["empty dividers add no text but meaningful notices remain"] = function()
 		fresh()
 		transcript.set("a", "message", block({ "A" }), { final = true })
 		transcript.divider()
-		h.eq({ "A", "", "---", "" }, buffer_lines())
+		transcript.divider("")
+		h.eq({ "A", "" }, buffer_lines())
+		transcript.divider("*pi exited (code 1)*")
+		transcript.divider("*Cannot start pi*")
+		h.eq({ "A", "", "*pi exited (code 1)*", "", "*Cannot start pi*", "" }, buffer_lines())
 	end,
 
 	["reset clears buffer and block state"] = function()
@@ -157,8 +161,8 @@ return {
 
 		h.wait_until(function()
 			local lines = buffer_lines()
-			return lines[#lines - 1] == "---"
-		end, "the closing divider; buffer:\n" .. table.concat(buffer_lines(), "\n"), 10000)
+			return lines[#lines - 1] == "Two files." and not require("pim.state").is_busy()
+		end, "the tool run to settle", 10000)
 		local snapshot = buffer_lines()
 		local call_fold, result_fold = vim.api.nvim_win_call(assert(layout.transcript_win()), function()
 			return vim.fn.foldclosed(7), vim.fn.foldclosed(14)
@@ -191,14 +195,12 @@ return {
 			"",
 			"Two files.",
 			"",
-			"---",
-			"",
 		}, snapshot)
 		h.eq(7, call_fold, "tool call fold should be closed at its header")
 		h.eq(-1, result_fold, "tool result fold should be open")
 	end,
 
-	["end-to-end: fake pi run renders user echo, assistant text, divider"] = function()
+	["end-to-end: fake pi run renders messages without literal dividers"] = function()
 		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua" } })
 		require("pim").start()
 		transcript.reset()
@@ -209,8 +211,8 @@ return {
 
 		h.wait_until(function()
 			local lines = buffer_lines()
-			return lines[#lines - 1] == "---"
-		end, "the closing divider; buffer:\n" .. table.concat(buffer_lines(), "\n"), 10000)
+			return lines[#lines - 1] == "Hello from fake pi" and not require("pim.state").is_busy()
+		end, "the run to settle", 10000)
 		local snapshot = buffer_lines()
 
 		h.eq({
@@ -222,12 +224,10 @@ return {
 			"",
 			"Hello from fake pi",
 			"",
-			"---",
-			"",
 		}, snapshot)
 	end,
 
-	["end-to-end: a retried run draws exactly one divider"] = function()
+	["end-to-end: a retried run adds no literal dividers"] = function()
 		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "retry" } })
 		require("pim").start()
 		transcript.reset()
@@ -238,8 +238,8 @@ return {
 
 		h.wait_until(function()
 			local lines = buffer_lines()
-			return lines[#lines - 1] == "---"
-		end, "the closing divider; buffer:\n" .. table.concat(buffer_lines(), "\n"), 10000)
+			return lines[#lines - 1] == "Hello on the second try" and not require("pim.state").is_busy()
+		end, "the retried run to settle", 10000)
 		h.eq({
 			"### You",
 			"",
@@ -248,8 +248,6 @@ return {
 			"### pi",
 			"",
 			"Hello on the second try",
-			"",
-			"---",
 			"",
 		}, buffer_lines())
 	end,
