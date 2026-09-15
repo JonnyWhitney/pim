@@ -174,6 +174,10 @@ require("pim").setup({
     toggle_fold = "<Tab>",
   },
   input = { min_height = 3, max_height = 15 },
+  completion = {
+    respect_gitignore = true,
+    exclude = { "**/node_modules/**" },
+  },
   streaming_submit = "steer", -- Or "followUp".
   bash_passthrough = true, -- Run prompts that start with ! or !! as shell commands.
   transcript = {
@@ -245,6 +249,51 @@ pim uses `git ls-files`. Outside a Git repository, it uses Neovim file
 completion. pi expands `@file` references on the server.
 
 Use `CTRL-X CTRL-O` to start either completion manually.
+
+Git ignore filtering is enabled by default with `completion.respect_gitignore`.
+Standard rules from `.gitignore`, `.git/info/exclude`, and global exclusions are
+applied. Tracked files remain eligible even when matched by those rules.
+With `respect_gitignore = false`, ignored files and directory contents are
+included. No implicit exclusions are added for build outputs.
+
+Explicit `completion.exclude` globs are always applied, including to tracked
+files and Neovim completion outside Git or after a failed Git query. Root and
+nested `node_modules` directories and their contents are excluded by default.
+A supplied list replaces the defaults; an empty list disables glob exclusions.
+
+A glob is a path pattern with wildcards. Complete paths relative to the current
+working directory (not necessarily the Git root) are matched case-sensitively
+with `/` separators. `*` is matched within one path component; `**/` is matched
+across zero or more directory levels. For example:
+
+- `*.log`: root-level logs only.
+- `**/*.log`: logs at any depth.
+- `**/build/**`: build directories at any depth.
+- `config/private.json`: one exact relative path.
+
+Neovim's built-in glob syntax is used. Shell expansion, Git-style negation, and
+ordered re-inclusion are not supported. Directory trailing slashes are normalized
+for matching; returned candidate text is preserved.
+
+```lua
+-- Only Git ignore filtering is disabled; node_modules remains excluded.
+require("pim").setup({ completion = { respect_gitignore = false } })
+
+-- The default pattern is repeated so it is retained with custom exclusions.
+require("pim").setup({ completion = {
+  exclude = { "**/node_modules/**", "**/build/**", "*.log" },
+} })
+
+-- Both filters are disabled.
+require("pim").setup({ completion = { respect_gitignore = false, exclude = {} } })
+```
+
+Setting changes are applied on the next request despite the ten-second Git
+candidate cache. Enumeration is synchronous, with a two-second Git timeout.
+Large ignored directories may still be scanned when Git ignore filtering is
+disabled: explicit exclusions are applied only after enumeration, not as pruning.
+These settings affect picker candidates only. Manually entered `@file` references
+are not blocked, and file access is not protected by these exclusions.
 
 ## Extension dialogs
 

@@ -26,7 +26,135 @@ local function fixture_repo()
 	return repo
 end
 
+local function with_files(git, fn)
+	local root = vim.fn.tempname()
+	vim.fn.mkdir(root, "p")
+	local paths = {
+		"ignored.log",
+		"build/out.js",
+		"nested/build/out.js",
+		"node_modules/pkg/x.js",
+		"nested/node_modules/pkg/x.js",
+		"node_modules_backup/x.js",
+		"tracked.log",
+		"plain.txt",
+		"nested/other.log",
+		"config/private.json",
+		"UPPER.LOG",
+	}
+	for _, path in ipairs(paths) do
+		vim.fn.mkdir(vim.fs.dirname(root .. "/" .. path), "p")
+		vim.fn.writefile({ "fixture" }, root .. "/" .. path)
+	end
+	if git then
+		vim.system({ "git", "init", "-q", root }):wait()
+		vim.system({ "git", "-C", root, "config", "core.excludesFile", "/dev/null" }):wait()
+		vim.fn.writefile({ "*.log", "build/", "node_modules/" }, root .. "/.gitignore")
+		vim.system({ "git", "-C", root, "add", "-f", "tracked.log" }):wait()
+	end
+	local cwd = vim.fn.getcwd()
+	vim.cmd.cd(root)
+	local ok, err = pcall(fn, root)
+	vim.cmd.cd(cwd)
+	vim.fn.delete(root, "rf")
+	if not ok then
+		error(err, 0)
+	end
+end
+
 return {
+	["Git filters and cache setting changes work together"] = function()
+		with_files(true, function(root)
+			local function offered(path)
+				return vim.tbl_contains(completion.file_candidates("", root), path)
+			end
+			for _, respect in ipairs({ true, false, true }) do
+				config.setup({ completion = { respect_gitignore = respect } })
+				h.eq(not respect, offered("ignored.log"))
+				h.eq(not respect, offered("build/out.js"))
+				h.ok(offered("tracked.log"))
+				h.ok(offered("plain.txt"))
+				h.ok(offered("node_modules_backup/x.js"))
+				h.eq(false, offered("node_modules/pkg/x.js"))
+				h.eq(false, offered("nested/node_modules/pkg/x.js"))
+				for _, path in ipairs(completion.file_candidates(".git", root)) do
+					h.eq(".gitignore", path)
+				end
+			end
+			config.setup({ completion = { respect_gitignore = false, exclude = {} } })
+			h.ok(offered("node_modules/pkg/x.js"))
+			h.ok(offered("nested/node_modules/pkg/x.js"))
+			config.setup({
+				completion = { respect_gitignore = false, exclude = { "*.log", "**/build/**", "config/private.json" } },
+			})
+			h.eq(false, offered("tracked.log"))
+			h.eq(false, offered("ignored.log"))
+			h.ok(offered("nested/other.log"))
+			h.ok(offered("UPPER.LOG"))
+			h.eq(false, offered("build/out.js"))
+			h.eq(false, offered("nested/build/out.js"))
+			h.eq(false, offered("config/private.json"))
+			config.setup({ completion = { respect_gitignore = false, exclude = { "**/*.log" } } })
+			h.eq(false, offered("nested/other.log"))
+			vim.fn.writefile({ "new" }, root .. "/new.txt")
+			h.eq(false, offered("new.txt"))
+			completion.reset()
+			h.ok(offered("new.txt"))
+			h.eq({ { word = "@plain.txt", menu = "file" } }, completion.omnifunc(0, "@plain"))
+			config.setup({ completion = { respect_gitignore = false, exclude = { "nested/*.log" } } })
+			vim.cmd.cd(root .. "/nested")
+			h.eq(
+				{ "other.log" },
+				completion.file_candidates("other", root .. "/nested"),
+				"patterns are relative to cwd"
+			)
+		end)
+	end,
+
+	["non-Git and failed Git candidates share directory filtering"] = function()
+		for _, git in ipairs({ false, true }) do
+			with_files(git, function(root)
+				local real_system, real_completion = vim.system, vim.fn.getcompletion
+				---@diagnostic disable-next-line: duplicate-set-field
+				vim.system = function()
+					return {
+						wait = function()
+							return { code = 1 }
+						end,
+					}
+				end
+				---@diagnostic disable-next-line: duplicate-set-field
+				vim.fn.getcompletion = function()
+					return {
+						"node_modules",
+						"node_modules/",
+						"nested/node_modules/",
+						"./node_modules/",
+						"plain.txt",
+						"node_modules_backup/",
+					}
+				end
+				local ok, err = pcall(function()
+					h.eq({ "plain.txt", "node_modules_backup/" }, completion.file_candidates("", root))
+					config.setup({ completion = { exclude = {} } })
+					h.eq(6, #completion.file_candidates("", root))
+				end)
+				vim.system, vim.fn.getcompletion = real_system, real_completion
+				if not ok then
+					error(err, 0)
+				end
+				config.setup()
+				completion.reset()
+			end)
+		end
+	end,
+
+	["real non-Git directory completion is filtered"] = function()
+		with_files(false, function()
+			h.eq({ "node_modules_backup/" }, completion.file_candidates("node_modules"))
+			h.eq({ "node_modules_backup/" }, completion.file_candidates("node_modules_b"))
+		end)
+	end,
 	["slash context: only at the very start of the prompt"] = function()
 		h.eq(0, (completion.parse_context("/mo", 3, 1)))
 		h.eq(0, (completion.parse_context("/", 1, 1)))
