@@ -4,7 +4,10 @@ local data = require("pim.completion.data")
 -- Shared data is kept independent of omni matching and menu presentation.
 M.parse_context = data.parse_context
 M.refresh_commands = data.refresh_commands
-M.reset = data.reset
+function M.reset()
+	data.reset()
+	require("pim.completion.backend").reset()
+end
 
 local function slash_matches(base)
 	local prefix = base:sub(2)
@@ -66,25 +69,7 @@ function M.attach()
 		return
 	end
 
-	vim.bo[buf].omnifunc = "v:lua.require'pim.completion'.omnifunc"
-	pcall(vim.api.nvim_set_option_value, "completeopt", "menu,menuone,noselect", { buf = buf })
-
-	vim.keymap.set("i", "/", function()
-		local cursor = vim.api.nvim_win_get_cursor(0)
-		if cursor[1] == 1 and cursor[2] == 0 then
-			return "/<C-x><C-o>"
-		end
-		return "/"
-	end, { buffer = buf, expr = true, desc = "Slash-command completion" })
-
-	vim.keymap.set("i", "@", function()
-		local col = vim.api.nvim_win_get_cursor(0)[2]
-		local prev = col > 0 and vim.api.nvim_get_current_line():sub(col, col) or ""
-		if col == 0 or prev:match("%s") then
-			return "@<C-x><C-o>"
-		end
-		return "@"
-	end, { buffer = buf, expr = true, desc = "File-path completion" })
+	require("pim.completion.backend").attach(buf)
 end
 
 return M

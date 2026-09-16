@@ -290,12 +290,86 @@ The input buffer has an 'omnifunc'. It can start automatically in two cases.
   disappearing entries are skipped. Git ignore rules are not applied by this
   fallback.
 
-Neovim's built-in omni menu is opened automatically in these contexts.
-Suggestions are matched by prefix, not fuzzily. These mappings and completion
-settings are applied only to the pim input buffer.
+By default, Neovim's built-in omni menu is opened automatically in these
+contexts. Suggestions are matched by prefix, not fuzzily. These mappings and
+completion settings are applied only to the pim input buffer.
 
 pi expands @file references on the server. CTRL-X CTRL-O starts either
 completion manually.
+
+OPTIONAL BLINK INTEGRATION                               *pim-blink*
+
+A Blink source is bundled with pim. No separate source plugin is needed.
+Integration must be enabled explicitly through Blink's configuration. Installing
+Blink alone does not change native completion.
+
+This config callback can be added to an existing lazy.nvim Blink specification.
+Existing opts, including menus, keymaps, documentation, ghost text, and selection
+settings, are retained. A sources.default list or function must be supplied.
+>lua
+  config = function(_, opts)
+    opts.sources = require("pim.completion.blink").setup(opts.sources)
+    require("blink.cmp").setup(opts)
+  end,
+<
+pim must be available on runtimepath when this callback is run. With lazy.nvim,
+"JonnyWhitney/pim" can be added to Blink's existing dependencies. Other
+dependencies must be kept, including blink.lib for development Blink.
+
+For an existing setup with omni and lazydev, these source options can be retained:
+>lua
+  sources = {
+    default = { "lsp", "omni", "path", "buffer", "lazydev" },
+    providers = {
+      lazydev = { name = "LazyDev", module = "lazydev.integrations.blink" },
+      omni = {
+        enabled = function()
+          local omnifunc = vim.bo.omnifunc
+          return omnifunc ~= "" and omnifunc ~= "v:lua.vim.lsp.omnifunc"
+        end,
+      },
+    },
+    per_filetype = {
+      minifiles = { inherit_defaults = false },
+    },
+  },
+<
+lazydev is not required by pim. Other source lists can be supplied instead.
+The helper must be called once, after source options are assembled and before
+blink.cmp.setup. A new configuration is returned. Provider pim is registered
+with module pim.completion.blink and no fallbacks; the pim ID is reserved.
+Existing filetype overrides and inherit_defaults are composed into a dynamic
+default-source selector. Filetype overrides must not be added afterwards.
+
+Only pim suggestions are selected in valid input-buffer contexts, even when no
+candidates match. omni and other configured sources are retained elsewhere.
+Ordinary Markdown and transcript buffers are unaffected. Paths are matched
+fuzzily by Blink: @comp can match lua/pim/completion.lua. Command descriptions
+and source labels are retained. Explicit replacement ranges prevent duplicate
+sigils and respect completion.keyword.range, including full-range mid-token edits.
+
+No selection, insertion, or menu settings are overridden. In particular,
+preselect = false and auto_insert = false can be retained. Native omni mappings
+and option overrides are removed from an already attached buffer or skipped when
+Blink is configured first. Activation survives hide/show and stop/start. If Blink
+is disabled after activation, the integration callback must be omitted on the
+next Neovim start to restore the default backend. No automatic switch is made.
+
+Blink v1.10.0 is supported. Development v1.10.0-234-gf724653 has also been tested
+with blink.lib. Only documented source and configuration interfaces are used.
+Other Blink releases have not yet been verified. The optional tests require an
+installed Blink checkout; nothing is downloaded by the tests:
+>
+  mise run test:blink /path/to/blink.cmp '' lua
+  mise run test:blink /path/to/blink.cmp /path/to/blink.lib rust
+<
+Both load orders can be checked by appending blink-first. Real fuzzy matching,
+UTF-8, punctuation, automatic triggers, full-range edits, deletion, empty matches,
+selection, documentation, and normal/filetype sources are checked in a clean
+child Neovim instance. The default test suite requires no Blink dependency and
+includes a clean child Neovim check of automatic native popups.
+
+FILE FILTERING
 
 Git ignore filtering is enabled by completion.respect_gitignore by default.
 Standard rules from .gitignore, .git/info/exclude, and global exclusions are
@@ -352,7 +426,7 @@ A cancel function is returned. Git is run asynchronously. Recursive fallback is
 scheduled in batches of at most 128 entries. is_current must be supplied by the
 consumer to reject changed buffers or contexts. Directory/settings changes and
 resets are checked internally. Only complete, current results are cached and
-returned. No second completion menu is connected to this API yet.
+returned. This API is used by the bundled Blink source.
 
 Validation: mise run test completion
 A 2,049-file temporary tree is checked for complete enumeration and event-loop
