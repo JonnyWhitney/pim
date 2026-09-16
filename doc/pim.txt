@@ -286,6 +286,10 @@ The input buffer has an 'omnifunc'. It can start automatically in two cases.
 - Type `@` at the start of a word to complete a file path. pim uses
   `git ls-files` in a Git repository. Elsewhere it uses Neovim file completion.
 
+Neovim's built-in omni menu is opened automatically in these contexts.
+Suggestions are matched by prefix, not fuzzily. These mappings and completion
+settings are applied only to the pim input buffer.
+
 pi expands @file references on the server. CTRL-X CTRL-O starts either
 completion manually.
 

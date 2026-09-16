@@ -2,6 +2,7 @@ local h = require("helpers")
 local client = require("pim.rpc.client")
 local completion = require("pim.completion")
 local config = require("pim.config")
+local data = require("pim.completion.data")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
@@ -63,6 +64,28 @@ local function with_files(git, fn)
 end
 
 return {
+	["shared candidates are unfiltered and caller-owned"] = function()
+		refresh_from_fake_pi()
+		local commands = data.command_candidates()
+		h.eq(3, #commands)
+		commands[1].name = "changed"
+		commands[1].source = "changed"
+		h.ok(data.command_candidates()[1].name ~= "changed")
+		h.ok(data.command_candidates()[1].source ~= "changed")
+		with_files(true, function(root)
+			local paths = data.file_candidates(root)
+			h.ok(vim.tbl_contains(paths, "plain.txt"))
+			h.ok(vim.tbl_contains(paths, "tracked.log"))
+			h.eq(false, vim.tbl_contains(paths, "ignored.log"))
+			h.eq(false, vim.tbl_contains(paths, "node_modules/pkg/x.js"))
+			paths[1] = "changed"
+			h.eq(false, vim.tbl_contains(data.file_candidates(root), "changed"))
+			h.eq({}, completion.file_candidates("lain", root), "omni is not fuzzy")
+		end)
+		completion.reset()
+		h.eq({}, data.command_candidates())
+	end,
+
 	["Git filters and cache setting changes work together"] = function()
 		with_files(true, function(root)
 			local function offered(path)

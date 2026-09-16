@@ -248,6 +248,9 @@ Type `@` at the start of a word to complete a file path. In a Git repository,
 pim uses `git ls-files`. Outside a Git repository, it uses Neovim file
 completion. pi expands `@file` references on the server.
 
+Neovim's built-in omni menu is opened automatically by `/` and `@` in these
+contexts. Suggestions are matched by prefix, not fuzzily. These mappings and
+completion settings are applied only to the pim input buffer.
 Use `CTRL-X CTRL-O` to start either completion manually.
 
 Git ignore filtering is enabled by default with `completion.respect_gitignore`.
