@@ -134,10 +134,10 @@ return {
 		end)
 	end,
 
-	["non-Git and failed Git candidates share directory filtering"] = function()
+	["non-Git and failed Git discovery is recursive and filtered"] = function()
 		for _, git in ipairs({ false, true }) do
 			with_files(git, function(root)
-				local real_system, real_completion = vim.system, vim.fn.getcompletion
+				local original = vim.system
 				---@diagnostic disable-next-line: duplicate-set-field
 				vim.system = function()
 					return {
@@ -146,23 +146,15 @@ return {
 						end,
 					}
 				end
-				---@diagnostic disable-next-line: duplicate-set-field
-				vim.fn.getcompletion = function()
-					return {
-						"node_modules",
-						"node_modules/",
-						"nested/node_modules/",
-						"./node_modules/",
-						"plain.txt",
-						"node_modules_backup/",
-					}
-				end
 				local ok, err = pcall(function()
-					h.eq({ "plain.txt", "node_modules_backup/" }, completion.file_candidates("", root))
+					local paths = data.file_candidates(root)
+					h.ok(vim.tbl_contains(paths, "nested/other.log"))
+					h.ok(vim.tbl_contains(paths, "ignored.log"), "fallback does not apply Git ignores")
+					h.eq(false, vim.tbl_contains(paths, "node_modules/pkg/x.js"))
 					config.setup({ completion = { exclude = {} } })
-					h.eq(6, #completion.file_candidates("", root))
+					h.ok(vim.tbl_contains(data.file_candidates(root), "node_modules/pkg/x.js"))
 				end)
-				vim.system, vim.fn.getcompletion = real_system, real_completion
+				vim.system = original
 				if not ok then
 					error(err, 0)
 				end
@@ -172,10 +164,11 @@ return {
 		end
 	end,
 
-	["real non-Git directory completion is filtered"] = function()
-		with_files(false, function()
-			h.eq({ "node_modules_backup/" }, completion.file_candidates("node_modules"))
-			h.eq({ "node_modules_backup/" }, completion.file_candidates("node_modules_b"))
+	["non-Git omni matching remains prefix based"] = function()
+		with_files(false, function(root)
+			h.eq({ "node_modules_backup/x.js" }, completion.file_candidates("node_modules", root))
+			h.eq({}, completion.file_candidates("other", root))
+			h.eq({ "nested/other.log" }, completion.file_candidates("nested/other", root))
 		end)
 	end,
 	["slash context: only at the very start of the prompt"] = function()

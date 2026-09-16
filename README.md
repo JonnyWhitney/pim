@@ -245,8 +245,11 @@ Type `/` as the first prompt character to complete pi slash commands. This
 includes extension commands, prompt templates, and skills.
 
 Type `@` at the start of a word to complete a file path. In a Git repository,
-pim uses `git ls-files`. Outside a Git repository, it uses Neovim file
-completion. pi expands `@file` references on the server.
+File paths are obtained with `git ls-files`. Outside Git, or after a failed Git
+query, files are discovered recursively without another executable. Paths are
+relative to the working directory. Directory symlinks are not followed.
+Unreadable or disappearing entries are skipped. Git ignore rules are not applied
+by this fallback. `@file` references are expanded by pi on the server.
 
 Neovim's built-in omni menu is opened automatically by `/` and `@` in these
 contexts. Suggestions are matched by prefix, not fuzzily. These mappings and
@@ -260,7 +263,7 @@ With `respect_gitignore = false`, ignored files and directory contents are
 included. No implicit exclusions are added for build outputs.
 
 Explicit `completion.exclude` globs are always applied, including to tracked
-files and Neovim completion outside Git or after a failed Git query. Root and
+files and recursive discovery outside Git or after a failed Git query. Root and
 nested `node_modules` directories and their contents are excluded by default.
 A supplied list replaces the defaults; an empty list disables glob exclusions.
 
@@ -275,8 +278,9 @@ across zero or more directory levels. For example:
 - `config/private.json`: one exact relative path.
 
 Neovim's built-in glob syntax is used. Shell expansion, Git-style negation, and
-ordered re-inclusion are not supported. Directory trailing slashes are normalized
-for matching; returned candidate text is preserved.
+ordered re-inclusion are not supported. File paths, rather than directory
+placeholders, are offered. Quoted references and paths containing whitespace
+are not supported by the reference syntax.
 
 ```lua
 -- Only Git ignore filtering is disabled; node_modules remains excluded.
@@ -291,12 +295,33 @@ require("pim").setup({ completion = {
 require("pim").setup({ completion = { respect_gitignore = false, exclude = {} } })
 ```
 
-Setting changes are applied on the next request despite the ten-second Git
-candidate cache. Enumeration is synchronous, with a two-second Git timeout.
-Large ignored directories may still be scanned when Git ignore filtering is
-disabled: explicit exclusions are applied only after enumeration, not as pruning.
+Complete candidate lists are cached for ten seconds by directory and completion
+settings. Setting changes are applied on the next request. Caches are cleared
+when completion is reset. Omni enumeration remains synchronous, with a
+two-second Git timeout. Large trees can therefore delay the native popup.
+No candidate limit is imposed. Explicit exclusions are applied as filters, not
+traversal pruning, so excluded directories may still be scanned.
 These settings affect picker candidates only. Manually entered `@file` references
 are not blocked, and file access is not protected by these exclusions.
+
+### Discovery validation
+
+`mise run test completion` covers recursive discovery, failed Git queries,
+symlinks, simulated unreadable/disappearing entries, cancellation, and cache
+ownership. A temporary tree with 2,049 files is checked for complete enumeration
+and event-loop progress between batches.
+
+The shared `pim.completion.data.request_files(cwd, callback, is_current)` API is
+provided for asynchronous consumers. Git is run asynchronously; recursive
+fallback is scheduled in batches of at most 128 entries. A cancellation function
+is returned. The optional `is_current` predicate must be supplied by consumers
+to reject changed buffers or completion contexts. Directory and settings changes
+are checked internally. Cancelled or stale results are neither delivered nor
+cached. This API is not yet connected to a second completion menu.
+
+Individual filesystem calls, Git output decoding, sorting, and result copying
+are not time-bounded. Slow filesystems and very large result sets may still cause
+delays; the entire candidate list is held in memory.
 
 ## Extension dialogs
 

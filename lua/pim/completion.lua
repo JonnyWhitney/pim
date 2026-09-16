@@ -27,9 +27,9 @@ end
 ---@return string[]
 function M.file_candidates(prefix, cwd)
 	local matches = {}
-	local paths, native_matched = data.file_candidates(cwd, prefix)
+	local paths = data.file_candidates(cwd)
 	for _, path in ipairs(paths) do
-		if native_matched or vim.startswith(path, prefix) then
+		if vim.startswith(path, prefix) then
 			matches[#matches + 1] = path
 		end
 	end
