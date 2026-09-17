@@ -178,6 +178,13 @@ return {
 			text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 			h.ok(text:find("partial answer", 1, true), "the completed line is read on refresh")
 			h.eq(buf, inspector.open(invocation), "one buffer is reused per invocation")
+			value.agents[1].status, value.agents[1].stoppedBy = "stopped", "user"
+			value.agents[2].status, value.agents[2].stoppedBy = "aborted", "parent_abort"
+			subagent_state.update("call-1", value)
+			inspector.refresh("invocation-123")
+			text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+			h.ok(text:find("Stopped by: **user**", 1, true))
+			h.ok(text:find("Stopped by: **parent abort**", 1, true))
 		end)
 		vim.fn.delete(root, "rf")
 	end,

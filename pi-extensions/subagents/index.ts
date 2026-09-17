@@ -14,6 +14,21 @@ export default function (pi: ExtensionAPI) {
 	});
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "rpc") return;
+		pi.registerCommand("pim-internal-agent-stop", {
+			description: "Reserved for PIM child cancellation",
+			handler: async (args, context) => {
+				if (context.mode !== "rpc") return;
+				const [token, invocationId, childId, ...extra] = args.trim().split(/\s+/);
+				if (
+					extra.length ||
+					![token, invocationId].every((value) => /^[A-Za-z0-9_-]+$/.test(value ?? "")) ||
+					!/^(\*|[A-Za-z0-9_-]+)$/.test(childId ?? "")
+				)
+					throw new Error("Invalid PIM stop request.");
+				const labels = await backend.stop(invocationId, childId);
+				context.ui.setStatus("pim-agent-stop", JSON.stringify({ token, labels }));
+			},
+		});
 		pi.registerTool({
 			name: "subagent",
 			label: "Subagent",

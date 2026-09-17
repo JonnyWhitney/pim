@@ -85,6 +85,7 @@
 ---@field transcriptDir string
 ---@field agents PimSubagentAgent[]
 ---@field parentSessionId string|nil
+---@field parentSessionFile string|nil
 ---@field toolCallId string|nil
 ---@field createdAt string|nil
 ---@field updatedAt string|nil

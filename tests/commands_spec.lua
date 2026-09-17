@@ -9,6 +9,27 @@ local function load_plugin()
 end
 
 return {
+	["subagent stop and cleanup commands pass their bang flags"] = function()
+		load_plugin()
+		local control = require("pim.subagents.control")
+		local cleanup = require("pim.subagents.cleanup")
+		local stop, clean = control.stop, cleanup.clean
+		local calls = {}
+		---@diagnostic disable-next-line: duplicate-set-field
+		control.stop = function(all)
+			calls[#calls + 1] = { "stop", all }
+		end
+		---@diagnostic disable-next-line: duplicate-set-field
+		cleanup.clean = function(force)
+			calls[#calls + 1] = { "clean", force }
+		end
+		vim.cmd("PiAgentStop")
+		vim.cmd("PiAgentStop!")
+		vim.cmd("PiAgentClean")
+		vim.cmd("PiAgentClean!")
+		control.stop, cleanup.clean = stop, clean
+		h.eq({ { "stop", false }, { "stop", true }, { "clean", false }, { "clean", true } }, calls)
+	end,
 	["subagent commands pass their history scope to the picker"] = function()
 		load_plugin()
 

@@ -12,12 +12,13 @@ export interface RunOptions {
 	trusted: boolean;
 	parallel: boolean;
 	signal?: AbortSignal;
+	userSignal?: AbortSignal;
 	stopTimeout?: number;
 	invocation?: (args: string[]) => { command: string; args: string[] };
 	onRecord: (record: unknown) => void;
 }
 export interface Outcome {
-	status: "completed" | "failed" | "aborted";
+	status: "completed" | "failed" | "aborted" | "stopped";
 	output: string;
 	usage: Usage;
 }
@@ -88,6 +89,7 @@ export function childPrompt(agent: Agent): string {
 export async function runChild(agent: Agent, opts: RunOptions): Promise<Outcome> {
 	const usage = emptyUsage();
 	if (opts.signal?.aborted) return { status: "aborted", output: "Aborted by parent.", usage };
+	if (opts.userSignal?.aborted) return { status: "stopped", output: "Stopped by user.", usage };
 	let temporary: string | undefined;
 	try {
 		let systemFile: string | undefined;
@@ -127,6 +129,12 @@ export async function runChild(agent: Agent, opts: RunOptions): Promise<Outcome>
 				if (ended || killTimer) return;
 				kill("SIGTERM");
 				killTimer = setTimeout(() => kill("SIGKILL"), opts.stopTimeout ?? 5000);
+			};
+			let userStopped = false;
+			const userStop = () => {
+				if (ended || child.exitCode !== null || child.signalCode !== null) return;
+				userStopped = true;
+				stop();
 			};
 			const record = (value: unknown) => {
 				try {
@@ -191,6 +199,7 @@ export async function runChild(agent: Agent, opts: RunOptions): Promise<Outcome>
 				ended = true;
 				if (killTimer) clearTimeout(killTimer);
 				opts.signal?.removeEventListener("abort", stop);
+				opts.userSignal?.removeEventListener("abort", userStop);
 				buffer += decoder.end();
 				if (buffer.trim()) {
 					failure ||= "Interrupted child JSON record.";
@@ -199,22 +208,28 @@ export async function runChild(agent: Agent, opts: RunOptions): Promise<Outcome>
 				const aborted = opts.signal?.aborted;
 				const status = aborted
 					? "aborted"
-					: failure || code !== 0 || !assistantSeen
-						? "failed"
-						: "completed";
+					: userStopped
+						? "stopped"
+						: failure || code !== 0 || !assistantSeen
+							? "failed"
+							: "completed";
 				done({
 					status,
 					output: aborted
 						? "Aborted by parent."
-						: failure ||
-							(status === "failed"
-								? stderr || `Child exited with code ${code} without a final response.`
-								: output),
+						: userStopped
+							? "Stopped by user."
+							: failure ||
+								(status === "failed"
+									? stderr || `Child exited with code ${code} without a final response.`
+									: output),
 					usage,
 				});
 			});
 			opts.signal?.addEventListener("abort", stop, { once: true });
 			if (opts.signal?.aborted) stop();
+			opts.userSignal?.addEventListener("abort", userStop, { once: true });
+			if (opts.userSignal?.aborted) userStop();
 			child.stdin.end(childPrompt(agent));
 		});
 	} catch (error) {
@@ -229,9 +244,27 @@ export class Limiter {
 	private active = 0;
 	private waiting: (() => void)[] = [];
 	constructor(private readonly maximum = 4) {}
-	async run<T>(work: () => Promise<T>): Promise<T> {
-		if (this.active >= this.maximum) await new Promise<void>((done) => this.waiting.push(done));
-		else this.active++;
+	async run<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+		let admitted = true;
+		if (this.active >= this.maximum) {
+			admitted = await new Promise<boolean>((done) => {
+				const grant = () => {
+					signal?.removeEventListener("abort", cancel);
+					done(true);
+				};
+				const cancel = () => {
+					const index = this.waiting.indexOf(grant);
+					if (index >= 0) this.waiting.splice(index, 1);
+					signal?.removeEventListener("abort", cancel);
+					done(false);
+				};
+				this.waiting.push(grant);
+				signal?.addEventListener("abort", cancel, { once: true });
+				if (signal?.aborted) cancel();
+			});
+		} else this.active++;
+		// Cancelled waiters still finalize their controlled result without a process slot.
+		if (!admitted) return work();
 		try {
 			return await work();
 		} finally {

@@ -32,6 +32,8 @@ For lazy.nvim:
     "PiThinking",
     "PiAgents",
     "PiAgentTranscript",
+    "PiAgentStop",
+    "PiAgentClean",
     "PiLog",
   },
   -- opts = { ... }, -- See Configuration. setup() is optional.
@@ -91,6 +93,8 @@ when history is reloaded or a buffer or window is recreated.
 | `:PiThinking`    | Select a supported thinking level.                                                   |
 | `:PiAgents[!]`   | Select a current-session invocation. `!` includes retained history.                  |
 | `:PiAgentTranscript` | Select and open a current-session subagent transcript.                          |
+| `:PiAgentStop[!]` | A child is selected and stopped. `!` stops an invocation.                            |
+| `:PiAgentClean[!]` | Orphaned transcripts are cleaned. `!` bypasses the grace period.                    |
 | `:PiRestart`     | Restart pi and resume the current session.                                           |
 | `:PiStop[!]`     | Stop pi and close the pi windows. `!` skips confirmation.                            |
 | `:PiLog`         | Open the event log. Set `debug = true` for raw JSONL traffic.                        |
@@ -207,7 +211,36 @@ after restart. Incomplete final JSONL lines are retained until completed.
 Malformed records are reported and skipped, so later valid records still render.
 Missing or unsafe transcript paths are shown as unavailable.
 
-Targeted stop and cleanup commands are not yet available.
+### Stopping and cleanup
+
+- `:PiAgentStop` — one active child is selected and stopped.
+- `:PiAgentStop!` — an invocation is selected; all active and queued children are stopped.
+- `:PiAgentClean` — eligible orphaned transcripts are removed and counts are reported.
+- `:PiAgentClean!` — the grace period is bypassed for orphaned transcripts only.
+
+Targeted stops are sent through a private extension command, not parent abort.
+`SIGTERM` is followed by `SIGKILL` after 5000 ms when needed. Stopped children
+are recorded as `stopped` with `stoppedBy: "user"`. After termination and
+transcript acknowledgement, one steering message is queued for the parent.
+For stop-all, the stopped labels are combined in that message. Duplicate,
+already-completed, failed, or unacknowledged requests are not used for steering.
+Parent aborts remain `aborted` with `stoppedBy: "parent_abort"` and do not steer.
+
+Transcripts are retained while the parent session file exists. A missing parent
+file is first recorded in a private `orphaned.json` file during cleanup. The
+grace period starts at that observation, not at the last child update:
+
+```lua
+require("pim").setup({ subagents = { orphan_grace_days = 30 } })
+```
+
+A nonnegative whole number of days is required; `0` removes eligible orphans
+on the first cleanup. No cleanup is run automatically. Active invocations,
+including stored `pending` or `running` states after an interruption, are
+retained even with `!`. Invalid manifests, missing parent-file references,
+symlinks, unexpected files, and ambiguous paths are reported and skipped.
+Interrupted active records require manual review; activity is not inferred
+from age. These checks are not a sandbox against concurrent filesystem changes.
 
 ## Keymaps
 

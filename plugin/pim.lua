@@ -67,6 +67,14 @@ vim.api.nvim_create_user_command("PiAgentTranscript", function()
 	require("pim.ui.pickers").agent_transcript(false)
 end, { desc = "Select and open a subagent transcript" })
 
+vim.api.nvim_create_user_command("PiAgentStop", function(opts)
+	require("pim.subagents.control").stop(opts.bang)
+end, { bang = true, desc = "Stop a subagent. ! stops an invocation." })
+
+vim.api.nvim_create_user_command("PiAgentClean", function(opts)
+	require("pim.subagents.cleanup").clean(opts.bang)
+end, { bang = true, desc = "Clean orphaned transcripts. ! bypasses the grace period." })
+
 vim.api.nvim_create_user_command("PiLog", function()
 	require("pim.log").open()
 end, { desc = "Show the pim event log" })

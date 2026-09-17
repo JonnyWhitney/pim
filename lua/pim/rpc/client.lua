@@ -111,6 +111,9 @@ local function on_line(line)
 	if message.type == "response" then
 		handle_response(message)
 	elseif message.type == "extension_ui_request" then
+		if require("pim.subagents.control").acknowledge(message) then
+			return
+		end
 		if handlers.on_ui_request then
 			handlers.on_ui_request(message)
 		end
@@ -127,6 +130,7 @@ function M.start(opts)
 		error("[pim] pi is already running", 0)
 	end
 	handlers = opts or {}
+	require("pim.subagents.control").reset()
 	generation = generation + 1
 	local current_generation = generation
 	next_id = 0
@@ -191,12 +195,14 @@ function M.start(opts)
 end
 
 function M.stop(wait_ms)
+	require("pim.subagents.control").reset()
 	if proc then
 		proc.stop(wait_ms)
 	end
 end
 
 function M.reset()
+	require("pim.subagents.control").reset()
 	local active = proc
 	generation = generation + 1
 	proc = nil
@@ -209,6 +215,7 @@ function M.reset()
 end
 
 function M.kill()
+	require("pim.subagents.control").reset()
 	if proc then
 		proc.kill()
 	end
@@ -279,6 +286,7 @@ function M.clear_queue(callback)
 end
 
 function M.abort(callback)
+	require("pim.subagents.control").reset()
 	M.request("abort", nil, callback)
 end
 
