@@ -56,6 +56,12 @@ end
 ---@param block PimContentBlock
 ---@return PimRenderedBlock
 function M.call(block)
+	if block.name == "subagent" then
+		local rendered = require("pim.subagents.render").call(block.arguments)
+		if rendered then
+			return rendered
+		end
+	end
 	local lines = { header("tool", block.name, block.arguments) }
 	local folds = {}
 	if type(block.arguments) == "table" and not vim.tbl_isempty(block.arguments) then
@@ -157,6 +163,12 @@ end
 ---@param exec PimToolExecution
 ---@return PimRenderedBlock
 function M.execution(exec)
+	if exec.toolName == "subagent" then
+		local rendered = require("pim.subagents.render").result(exec.result, exec.isError)
+		if rendered then
+			return rendered
+		end
+	end
 	local status = ""
 	if exec.running then
 		status = " [running]"

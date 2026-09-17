@@ -30,6 +30,8 @@ For lazy.nvim:
     "PiClone",
     "PiModel",
     "PiThinking",
+    "PiAgents",
+    "PiAgentTranscript",
     "PiLog",
   },
   -- opts = { ... }, -- See Configuration. setup() is optional.
@@ -87,6 +89,8 @@ when history is reloaded or a buffer or window is recreated.
 | `:PiClone`       | Copy the active branch into a new session.                                           |
 | `:PiModel`       | Select a model.                                                                      |
 | `:PiThinking`    | Select a supported thinking level.                                                   |
+| `:PiAgents[!]`   | Select a current-session invocation. `!` includes retained history.                  |
+| `:PiAgentTranscript` | Select and open a current-session subagent transcript.                          |
 | `:PiRestart`     | Restart pi and resume the current session.                                           |
 | `:PiStop[!]`     | Stop pi and close the pi windows. `!` skips confirmation.                            |
 | `:PiLog`         | Open the event log. Set `debug = true` for raw JSONL traffic.                        |
@@ -191,8 +195,19 @@ Each invocation contains `invocation.json`, `<child-id>.jsonl`, and
 `<child-id>.summary.json`. Directories are private (`0700`), and files are private
 (`0600`). Symlink storage paths are rejected. The manifest is replaced atomically;
 complete JSONL records remain readable after interruption. These files may contain
-sensitive prompts and outputs. No automatic cleanup is performed. Dedicated
-inspection, targeted stop, and cleanup commands are not yet available.
+sensitive prompts and outputs. No automatic cleanup is performed.
+
+The main transcript shows only child counts and aggregate statuses. Use
+`:PiAgents` or `:PiAgentTranscript` to select and open a read-only inspector.
+`:PiAgents!` also scans retained invocations from other parent sessions. One
+`pim://subagents/<invocation-id>` buffer is reused per invocation. Parallel
+children are shown in separate foldable sections. Open inspectors refresh from
+new JSONL records during live tool updates. Completed transcripts can be opened
+after restart. Incomplete final JSONL lines are retained until completed.
+Malformed records are reported and skipped, so later valid records still render.
+Missing or unsafe transcript paths are shown as unavailable.
+
+Targeted stop and cleanup commands are not yet available.
 
 ## Keymaps
 

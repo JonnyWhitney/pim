@@ -137,6 +137,13 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     Select a thinking level that the current model supports. pim gets this
     list from pi. Older pi versions use a compatible fallback list.
 
+:PiAgents[!]                                                        *:PiAgents*
+    Select and open a subagent invocation from the current parent session.
+    Use [!] to include retained invocations from other parent sessions.
+
+:PiAgentTranscript                                        *:PiAgentTranscript*
+    Select and open a subagent transcript from the current parent session.
+
 :PiRestart                                                        *:PiRestart*
     Restart pi. pim resumes the current session if its session file exists.
 
@@ -570,9 +577,19 @@ Storage:
 Full events, configuration, thinking, tool calls, usage, and final output are
 stored. Directories use 0700; files use 0600. Symlink storage paths are
 rejected. Manifests are replaced atomically. Complete JSONL records remain
-readable after interruption. Sensitive prompts and outputs may be included.
-No automatic cleanup is performed. Dedicated inspection, targeted stop, and
-cleanup commands are not yet available.
+readable after interruption. Sensitive prompts and outputs may be included. No automatic cleanup is
+performed.
+
+The parent transcript renders only the child count and aggregate statuses.
+Use |:PiAgents| or |:PiAgentTranscript| to open a read-only inspector. One
+pim://subagents/<invocation-id> buffer is reused for each invocation. Parallel
+children have separate foldable sections. Live parent updates cause only new
+complete JSONL records to be read. Completed transcripts can be reopened after
+a restart. Incomplete final lines are retained until they are completed.
+Malformed records are reported and skipped. Later valid records still render.
+Missing or unsafe transcript paths are shown as unavailable.
+
+Targeted stop and cleanup commands are not yet available.
 
 ==============================================================================
 DEVELOPMENT                                                   *pim-development*

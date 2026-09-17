@@ -59,6 +59,14 @@ vim.api.nvim_create_user_command("PiThinking", function()
 	require("pim.ui.pickers").thinking()
 end, { desc = "Pick the pi thinking level" })
 
+vim.api.nvim_create_user_command("PiAgents", function(opts)
+	require("pim.ui.pickers").agents(opts.bang)
+end, { bang = true, desc = "List subagent invocations. ! includes retained history." })
+
+vim.api.nvim_create_user_command("PiAgentTranscript", function()
+	require("pim.ui.pickers").agent_transcript(false)
+end, { desc = "Select and open a subagent transcript" })
+
 vim.api.nvim_create_user_command("PiLog", function()
 	require("pim.log").open()
 end, { desc = "Show the pim event log" })

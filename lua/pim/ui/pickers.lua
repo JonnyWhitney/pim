@@ -191,6 +191,58 @@ function M.session()
 	end)
 end
 
+local function subagent_label(invocation)
+	local details = invocation.details
+	local counts = {}
+	for _, agent in ipairs(details.agents) do
+		counts[agent.status] = (counts[agent.status] or 0) + 1
+	end
+	local statuses = {}
+	for _, status in ipairs({ "running", "completed", "failed", "stopped", "aborted", "pending" }) do
+		if counts[status] then
+			statuses[#statuses + 1] = ("%d %s"):format(counts[status], status)
+		end
+	end
+	local labels = {}
+	for _, agent in ipairs(details.agents) do
+		labels[#labels + 1] = agent.label
+	end
+	return ("%s — %s — %s"):format(
+		table.concat(labels, ", "),
+		table.concat(statuses, ", "),
+		invocation.invocation_id
+	)
+end
+
+---@param include_historical boolean|nil
+function M.agents(include_historical)
+	if not require("pim.config").get().subagents.enabled then
+		vim.notify("[pim] Subagents are disabled", vim.log.levels.WARN)
+		return
+	end
+	local invocations, invalid = require("pim.subagents.discovery").list(include_historical == true)
+	if invalid > 0 then
+		vim.notify(("[pim] Skipped %d invalid subagent manifest(s)"):format(invalid), vim.log.levels.WARN)
+	end
+	if #invocations == 0 then
+		vim.notify("[pim] No subagent invocations are available", vim.log.levels.WARN)
+		return
+	end
+	vim.ui.select(invocations, {
+		prompt = include_historical and "subagent invocations (including history)" or "subagent invocations",
+		format_item = subagent_label,
+	}, function(choice)
+		if choice then
+			require("pim.subagents.inspector").open(choice)
+		end
+	end)
+end
+
+---@param include_historical boolean|nil
+function M.agent_transcript(include_historical)
+	M.agents(include_historical)
+end
+
 function M.thinking()
 	local client = require("pim.rpc.client")
 	client.get_available_thinking_levels(function(success, data)
