@@ -347,6 +347,132 @@ test("parent abort escalates despite SIGTERM being ignored and prevents queued c
 	assert.equal(preAborted.status, "aborted");
 });
 
+test("targeted user stops are persisted, idempotent, and independent of siblings", async (t) => {
+	const root = temporary(t);
+	const backend = new Backend();
+	let latest!: Details;
+	const task = backend.execute(
+		{
+			agents: [
+				{ ...agent, prompt: "hang" },
+				{ ...agent, prompt: "slow" },
+			],
+		},
+		{
+			...options(root),
+			stopTimeout: 20,
+			onUpdate: (details) => {
+				latest = details;
+			},
+		},
+	);
+	await new Promise((done) => setTimeout(done, 200));
+	assert.deepEqual(await backend.stop(latest.invocationId, latest.agents[1].id), []);
+	const stopped = backend.stop(latest.invocationId, latest.agents[0].id);
+	assert.deepEqual(await backend.stop(latest.invocationId, latest.agents[0].id), []);
+	assert.deepEqual(await stopped, [agent.label]);
+	const result = await task;
+	assert.equal(result.details.status, "stopped");
+	assert.equal(result.details.agents[0].stoppedBy, "user");
+	assert.equal(result.details.agents[1].status, "completed");
+	assert.ok(result.content[0].text.includes("Stopped by user."));
+	const records = readRecords(fs.readFileSync(latest.agents[0].transcriptPath, "utf8")).records as {
+		record: { type: string; pid?: number; child?: { stoppedBy: string } };
+	}[];
+	assert.ok(
+		records.some((item) => item.record.type === "final" && item.record.child?.stoppedBy === "user"),
+	);
+	const pid = records.find((item) => item.record.type === "ready")!.record.pid!;
+	assert.throws(() => process.kill(pid, 0));
+	assert.deepEqual(await backend.stop(latest.invocationId, "*"), []);
+	assert.deepEqual(await backend.stop("missing", "*"), []);
+});
+
+test("a queued child can be stopped without waiting for unrelated processes", async (t) => {
+	const root = temporary(t);
+	const backend = new Backend();
+	let latest!: Details;
+	const task = backend.execute(
+		{
+			agents: Array.from({ length: 5 }, (_, index) => ({
+				...agent,
+				label: `child-${index}`,
+				prompt: "hang",
+			})),
+		},
+		{
+			...options(root),
+			stopTimeout: 20,
+			onUpdate: (details) => {
+				latest = details;
+			},
+		},
+	);
+	assert.equal(latest.agents[4].status, "pending");
+	assert.deepEqual(await backend.stop(latest.invocationId, latest.agents[4].id), ["child-4"]);
+	assert.ok(latest.agents.slice(0, 4).every((child) => child.status === "running"));
+	await backend.stop(latest.invocationId, "*");
+	await task;
+});
+
+for (const count of [1, 8]) {
+	test(`stop-all controls ${count} children including queued work`, async (t) => {
+		const root = temporary(t);
+		const backend = new Backend();
+		let latest!: Details;
+		const task = backend.execute(
+			{
+				agents: Array.from({ length: count }, (_, index) => ({
+					...agent,
+					label: `child-${index}`,
+					prompt: "hang",
+				})),
+			},
+			{
+				...options(root),
+				stopTimeout: 20,
+				onUpdate: (details) => {
+					latest = details;
+				},
+			},
+		);
+		await new Promise((done) => setTimeout(done, 200));
+		assert.equal((await backend.stop(latest.invocationId, "*")).length, count);
+		const result = await task;
+		assert.ok(
+			result.details.agents.every(
+				(child) => child.status === "stopped" && child.stoppedBy === "user",
+			),
+		);
+		assert.deepEqual(await backend.stop(latest.invocationId, "*"), []);
+	});
+}
+
+test("parent abort suppresses user-stop acknowledgement and remains distinct", async (t) => {
+	const root = temporary(t);
+	const backend = new Backend();
+	const controller = new AbortController();
+	let latest!: Details;
+	const task = backend.execute(
+		{ agents: [{ ...agent, prompt: "hang" }] },
+		{
+			...options(root),
+			signal: controller.signal,
+			stopTimeout: 20,
+			onUpdate: (details) => {
+				latest = details;
+			},
+		},
+	);
+	await new Promise((done) => setTimeout(done, 200));
+	const stopped = backend.stop(latest.invocationId, "*");
+	controller.abort();
+	assert.deepEqual(await stopped, []);
+	const result = await task;
+	assert.equal(result.details.agents[0].status, "aborted");
+	assert.equal(result.details.agents[0].stoppedBy, "parent_abort");
+});
+
 test("extension activation fails closed outside the PIM RPC host", (t) => {
 	const host = process.env.PIM_HOST,
 		root = process.env.PIM_SUBAGENT_ROOT;
@@ -361,6 +487,7 @@ test("extension activation fails closed outside the PIM RPC host", (t) => {
 	const pi = {
 		on: (name: string, handler: Function) => handlers.set(name, handler),
 		registerTool: () => registrations++,
+		registerCommand() {},
 	} as unknown as ExtensionAPI;
 	delete process.env.PIM_HOST;
 	extension(pi);

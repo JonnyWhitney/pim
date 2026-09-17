@@ -2,7 +2,7 @@ local M = {}
 
 M.defaults = {
 	pi_cmd = "pi",
-	subagents = { enabled = true },
+	subagents = { enabled = true, orphan_grace_days = 30 },
 	args = {},
 	keymaps = {
 		submit = "<CR><CR>",
@@ -83,6 +83,11 @@ local function validate(opts)
 
 	if type(opts.subagents.enabled) ~= "boolean" then
 		fail("subagents.enabled must be a boolean")
+	end
+
+	local grace = opts.subagents.orphan_grace_days
+	if type(grace) ~= "number" or grace < 0 or grace == math.huge or grace % 1 ~= 0 then
+		fail("subagents.orphan_grace_days must be a nonnegative integer")
 	end
 
 	if type(opts.completion.respect_gitignore) ~= "boolean" then

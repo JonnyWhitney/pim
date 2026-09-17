@@ -134,6 +134,9 @@ local function render(inspector)
 	for _, agent in ipairs(inspector.invocation.details.agents) do
 		local first = #lines + 1
 		lines[#lines + 1] = ("## %s [%s]"):format(agent.label, agent.status)
+		if agent.stoppedBy then
+			lines[#lines + 1] = "Stopped by: **" .. (agent.stoppedBy == "user" and "user" or "parent abort") .. "**"
+		end
 		local reader = inspector.readers[agent.id]
 		if reader.missing then
 			lines[#lines + 1] = "**Transcript unavailable:** `" .. agent.transcriptPath .. "`"

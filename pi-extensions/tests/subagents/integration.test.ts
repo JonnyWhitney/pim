@@ -125,6 +125,43 @@ test(
 			});
 			assert.equal(tools.includes("subagent"), enabled, stderr);
 			assert.ok(!stderr.includes("Failed to load extension"), stderr);
+			if (enabled) {
+				await new Promise<void>((done, reject) => {
+					let pending = "",
+						acknowledged = false,
+						responded = false;
+					const timer = setTimeout(() => reject(new Error("Stop acknowledgement timed out")), 3000);
+					const receive = (data: string) => {
+						pending += data;
+						let end: number;
+						while ((end = pending.indexOf("\n")) >= 0) {
+							const event = JSON.parse(pending.slice(0, end));
+							pending = pending.slice(end + 1);
+							if (event.type === "extension_ui_request" && event.statusKey === "pim-agent-stop") {
+								assert.deepEqual(JSON.parse(event.statusText), { token: "test-token", labels: [] });
+								acknowledged = true;
+							}
+							if (event.type === "response" && event.id === "stop-test") {
+								assert.equal(event.success, true);
+								responded = true;
+							}
+						}
+						if (acknowledged && responded) {
+							clearTimeout(timer);
+							child.stdout.off("data", receive);
+							done();
+						}
+					};
+					child.stdout.on("data", receive);
+					child.stdin.write(
+						JSON.stringify({
+							id: "stop-test",
+							type: "prompt",
+							message: "/pim-internal-agent-stop test-token missing *",
+						}) + "\n",
+					);
+				});
+			}
 			child.kill("SIGTERM");
 			await new Promise<void>((done) => child.once("close", () => done()));
 		}

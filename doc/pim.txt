@@ -144,6 +144,14 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 :PiAgentTranscript                                        *:PiAgentTranscript*
     Select and open a subagent transcript from the current parent session.
 
+:PiAgentStop[!]
+    An active child is selected and stopped. With !, an invocation is stopped.
+    The parent run is not aborted. See |:PiAgentStop|.
+
+:PiAgentClean[!]
+    Orphaned transcripts are cleaned. With !, the grace period is bypassed.
+    Active and ambiguous records are retained. See |:PiAgentClean|.
+
 :PiRestart                                                        *:PiRestart*
     Restart pi. pim resumes the current session if its session file exists.
 
@@ -589,7 +597,38 @@ a restart. Incomplete final lines are retained until they are completed.
 Malformed records are reported and skipped. Later valid records still render.
 Missing or unsafe transcript paths are shown as unavailable.
 
-Targeted stop and cleanup commands are not yet available.
+:PiAgentStop                                                *:PiAgentStop*
+  One active child is selected and stopped without aborting the parent.
+:PiAgentStop!
+  An invocation is selected. All active and queued children are stopped.
+
+SIGTERM is followed by SIGKILL after 5000 ms when needed. Stopped children
+are recorded as stopped with stoppedBy: "user". After termination and durable
+transcript acknowledgement, one normal RPC steering message is queued for the
+parent. Stop-all labels are combined in one message. Duplicate, completed,
+failed, or unacknowledged requests are not used for steering. Parent aborts
+remain aborted with stoppedBy: "parent_abort" and are not used for steering.
+
+:PiAgentClean                                               *:PiAgentClean*
+  Eligible orphaned transcript directories are removed. Removed, retained,
+  and skipped counts are reported.
+:PiAgentClean!
+  The grace period is bypassed for orphans only.
+
+Transcripts are retained while the parent session file exists. Missing parent
+files are first recorded in private orphaned.json files during cleanup. The
+orphan grace period starts at that observation, not the last child update.
+The default is 30 days. A nonnegative whole number is required:
+>
+  require("pim").setup({ subagents = { orphan_grace_days = 30 } })
+<
+With 0, eligible orphans are removed during the first cleanup. No cleanup is
+run automatically. Active invocations, including stored pending or running
+states after interruption, are retained even with !. Invalid manifests,
+missing parent-file references, symlinks, unexpected files, and ambiguous
+paths are reported and skipped. Interrupted active records require manual
+review. Activity is not inferred from age. These checks are not a sandbox
+against concurrent filesystem changes.
 
 ==============================================================================
 DEVELOPMENT                                                   *pim-development*
