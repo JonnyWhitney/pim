@@ -1,16 +1,12 @@
 {
-  "runtime.version": "LuaJIT",
-  "diagnostics.globals": [
-    "vim"
-  ],
-  "diagnostics.neededFileStatus": {
-    "need-check-nil": "Any!",
-    "param-type-mismatch": "Any!",
-    "undefined-field": "Any!",
-    "duplicate-set-field": "Any!"
-  },
-  "workspace.checkThirdParty": false,
-  "workspace.ignoreDir": [
-    ".git"
-  ]
+	"runtime.version": "LuaJIT",
+	"diagnostics.globals": ["vim"],
+	"diagnostics.neededFileStatus": {
+		"need-check-nil": "Any!",
+		"param-type-mismatch": "Any!",
+		"undefined-field": "Any!",
+		"duplicate-set-field": "Any!"
+	},
+	"workspace.checkThirdParty": false,
+	"workspace.ignoreDir": [".git"]
 }
