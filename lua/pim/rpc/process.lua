@@ -9,7 +9,17 @@ local M = {}
 ---@field kill fun(signal: string|nil)
 ---@field is_running fun(): boolean
 
----@param opts { cmd: string[], cwd: string|nil, on_line: fun(line: string), on_exit: fun(code: integer, intentional: boolean, stderr_tail: string[]), on_error: fun(traceback: string, count: integer)|nil, on_overflow: fun(dropped: integer)|nil, max_line_bytes: integer|nil }
+---@class PimProcessSpawnOpts
+---@field cmd string[]
+---@field cwd string|nil
+---@field env table<string, string>|nil
+---@field on_line fun(line: string)
+---@field on_exit fun(code: integer, intentional: boolean, stderr_tail: string[])
+---@field on_error fun(traceback: string, count: integer)|nil
+---@field on_overflow fun(dropped: integer)|nil
+---@field max_line_bytes integer|nil
+
+---@param opts PimProcessSpawnOpts
 ---@return PimProcessHandle|nil
 ---@return string|nil
 function M.spawn(opts)
@@ -80,6 +90,7 @@ function M.spawn(opts)
 		stdout = on_stdout,
 		stderr = on_stderr,
 		cwd = opts.cwd,
+		env = opts.env,
 	}, function(result)
 		vim.schedule(function()
 			running = false

@@ -3,13 +3,15 @@
 Use pi from Neovim. pim starts pi in RPC mode and shows the conversation
 in a Markdown buffer. Write prompts in a Neovim buffer.
 
-pim uses Lua only. It has no plugin dependencies. It targets Neovim nightly,
-Markdown Treesitter, and the pi RPC interface.
+The Neovim client is written in Lua and has no plugin dependencies. A bundled
+TypeScript subagent backend is executed by Pi. Neovim nightly, Markdown
+Treesitter, and the Pi RPC interface are supported.
 
 ## Requirements
 
 - Neovim nightly. Other Neovim releases are not supported.
-- Pi 0.84.4 or newer. Put `pi` on `$PATH`, or set `pi_cmd` to identify it.
+- Pi 0.85.1 or newer. The backend is tested against Pi 0.85.1.
+  `pi` must be on `$PATH` or set through `pi_cmd`.
 
 ## Install
 
@@ -71,23 +73,23 @@ when history is reloaded or a buffer or window is recreated.
 
 ## Commands
 
-| Command | Action |
-| --- | --- |
-| `:PiStart` | Open the UI. Start pi if it is stopped. |
-| `:PiToggle` | Show or hide the pi windows. |
-| `:PiSend [text]` | Send text. Without text, send the input buffer. |
-| `:PiAbort` | Clear queued prompts, restore them to input history, and stop the current agent run. |
-| `:PiResume` | Select a session for the current directory. |
-| `:PiTree` | Browse the active session tree. Prompts are disabled while it is open. |
-| `:PiTrust` | Manage project trust for the current working directory. |
-| `:PiNewSession` | Start a new session. |
-| `:PiFork` | Fork from an earlier prompt and edit that prompt in a new session. |
-| `:PiClone` | Copy the active branch into a new session. |
-| `:PiModel` | Select a model. |
-| `:PiThinking` | Select a supported thinking level. |
-| `:PiRestart` | Restart pi and resume the current session. |
-| `:PiStop[!]` | Stop pi and close the pi windows. `!` skips confirmation. |
-| `:PiLog` | Open the event log. Set `debug = true` for raw JSONL traffic. |
+| Command          | Action                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| `:PiStart`       | Open the UI. Start pi if it is stopped.                                              |
+| `:PiToggle`      | Show or hide the pi windows.                                                         |
+| `:PiSend [text]` | Send text. Without text, send the input buffer.                                      |
+| `:PiAbort`       | Clear queued prompts, restore them to input history, and stop the current agent run. |
+| `:PiResume`      | Select a session for the current directory.                                          |
+| `:PiTree`        | Browse the active session tree. Prompts are disabled while it is open.               |
+| `:PiTrust`       | Manage project trust for the current working directory.                              |
+| `:PiNewSession`  | Start a new session.                                                                 |
+| `:PiFork`        | Fork from an earlier prompt and edit that prompt in a new session.                   |
+| `:PiClone`       | Copy the active branch into a new session.                                           |
+| `:PiModel`       | Select a model.                                                                      |
+| `:PiThinking`    | Select a supported thinking level.                                                   |
+| `:PiRestart`     | Restart pi and resume the current session.                                           |
+| `:PiStop[!]`     | Stop pi and close the pi windows. `!` skips confirmation.                            |
+| `:PiLog`         | Open the event log. Set `debug = true` for raw JSONL traffic.                        |
 
 ### Tree explorer
 
@@ -121,19 +123,90 @@ pim reads and writes `$PI_CODING_AGENT_DIR/trust.json`. It uses
 to overwrite invalid trust data. If pi is running, use `:PiRestart` after you
 save a decision. The running process does not reload trust data.
 
+## Subagents
+
+Subagents are created by the calling model through the `subagent` tool. No named
+roles or agent-definition files are loaded. Activation is automatic in PIM RPC
+mode only. No native Pi terminal interface is provided. Activation can be disabled:
+
+```lua
+require("pim").setup({ subagents = { enabled = false } })
+```
+
+When disabled, no backend argument or private host environment is added. A missing
+bundle is reported at startup and by `:checkhealth pim`. No package installation
+or TypeScript compilation is required for users; imports are supplied by Pi.
+
+One `agents` array is used for single and parallel execution:
+
+```json
+{
+	"agents": [
+		{
+			"label": "parser review",
+			"prompt": "Review the parser changes.",
+			"tools": ["read", "grep", "find", "ls"],
+			"model": "anthropic/claude-sonnet-4-6",
+			"thinkingLevel": "high"
+		}
+	]
+}
+```
+
+`label`, `prompt`, `tools`, `model` (exact provider/model), and `thinkingLevel`
+are required. An empty tool list is supported. Thinking levels are `off`,
+`minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; levels may be clamped by Pi
+for the selected model. No model, tools, thinking level, or conversation history
+is inherited from the parent.
+
+Optional fields are `systemPrompt`, `systemPromptMode` (`append` by default or
+`replace`), `context`, `projectContext` (`true` by default), and `cwd` (the parent
+directory by default). A nonempty prompt is required for replacement mode. Caller
+context is separated from the task. Task text is supplied through standard input.
+System prompts are supplied through private temporary files and removed afterward.
+
+Project resources are approved only when the parent project is trusted and the
+canonical working directory is unchanged. Trust is not transferred to another
+`cwd`. With `projectContext = false`, context files, extension discovery, skills,
+and prompt-template discovery are disabled. Model settings and credentials remain
+available. A private child policy guard is explicitly loaded even in isolation.
+These controls are not an operating-system sandbox.
+
+Up to eight children are accepted per call. At most four child processes are run
+across all calls. Parallel tools are restricted to built-in `read`, `grep`, `find`,
+and `ls`; extension discovery is disabled to prevent overrides. All parallel
+lists are validated before execution. A single child can use any available Pi
+tool except `subagent`. Unavailable tools and unresolved models are reported as
+child failures. Unrelated children are not stopped by one child's failure.
+
+Parent abort terminates all children with SIGTERM, followed by SIGKILL after
+5000 ms if needed. Child results and nested usage are returned in input order.
+Parent output is capped at 50 KiB and 2000 lines in aggregate, with a smaller
+per-child share for parallel calls. Truncation is marked. Details contain only
+bounded summaries and transcript references, not child event history.
+
+Full events, thinking, tool calls, usage, configuration, and final output are
+stored under `stdpath("data")/pim/subagents/<parent-session-id>/<invocation-id>/`.
+Each invocation contains `invocation.json`, `<child-id>.jsonl`, and
+`<child-id>.summary.json`. Directories are private (`0700`), and files are private
+(`0600`). Symlink storage paths are rejected. The manifest is replaced atomically;
+complete JSONL records remain readable after interruption. These files may contain
+sensitive prompts and outputs. No automatic cleanup is performed. Dedicated
+inspection, targeted stop, and cleanup commands are not yet available.
+
 ## Keymaps
 
 All keymaps apply only to pim buffers. You can change them in `setup()`.
 
-| Keys | Buffer | Action |
-| --- | --- | --- |
-| `<CR><CR>` in Normal mode | Input | Send the prompt. |
-| `<localleader><CR>` | Input | Send a follow-up after the current run ends. |
-| `<C-c>` | pi buffers | Stop the shell command or agent run. |
-| `<Tab>` | Transcript | Toggle the fold at the cursor. |
-| `<Up>` and `<Down>` | Input | Move through prompt history at the first or last line. |
-| `/` at prompt start | Input | Complete pi slash commands. |
-| `@` at word start | Input | Complete file paths. |
+| Keys                      | Buffer     | Action                                                 |
+| ------------------------- | ---------- | ------------------------------------------------------ |
+| `<CR><CR>` in Normal mode | Input      | Send the prompt.                                       |
+| `<localleader><CR>`       | Input      | Send a follow-up after the current run ends.           |
+| `<C-c>`                   | pi buffers | Stop the shell command or agent run.                   |
+| `<Tab>`                   | Transcript | Toggle the fold at the cursor.                         |
+| `<Up>` and `<Down>`       | Input      | Move through prompt history at the first or last line. |
+| `/` at prompt start       | Input      | Complete pi slash commands.                            |
+| `@` at word start         | Input      | Complete file paths.                                   |
 
 In Insert mode, `<CR>` inserts a new line. pim does not change `Esc`.
 
@@ -214,12 +287,12 @@ highlighting is retained in both cases.
 
 These default highlight links are supplied without overwriting user definitions:
 
-| Group | Default link |
-| --- | --- |
-| `PimUserHeader` | `Identifier` |
-| `PimAssistantHeader` | `Statement` |
-| `PimCustomHeader` | `Special` |
-| `PimDivider` | `Comment` |
+| Group                | Default link |
+| -------------------- | ------------ |
+| `PimUserHeader`      | `Identifier` |
+| `PimAssistantHeader` | `Statement`  |
+| `PimCustomHeader`    | `Special`    |
+| `PimDivider`         | `Comment`    |
 
 Each `header_highlights` value can be set to an existing Neovim highlight-group
 name. Partial overrides are merged with the defaults. Alternatively, the pim
@@ -456,14 +529,38 @@ Queued steer and follow-up messages are virtual lines. You cannot yank them.
 
 ## Development
 
+Node.js 24.21.0, the latest LTS release, and pnpm 12.4.2 are pinned through
+`pi-extensions/mise.toml`. Node.js 24.21.0 or a newer 24.x release is required
+for backend development. These tool versions are scoped to `pi-extensions/`.
+Other Node.js majors are rejected by the backend development commands.
+Pi API development dependencies remain pinned to 0.85.1.
+
+The extension and its TypeScript tests are checked with `tsgo` from
+`@typescript/native-preview`. TypeScript 7.0.2 is included for editor support.
+Oxlint 1.83.0 and Oxfmt 0.68.0 are pinned for linting and formatting. These tools
+are development-only; no Node.js toolchain is required by the Neovim client.
+
+The TypeScript package, lockfile, configs, scripts, dependencies, and tests are
+contained in `pi-extensions/`. Oxfmt is restricted to that package. No Oxfmt
+configuration is applied to the repository root or the Lua client. Shared JSON
+fixtures remain in `tests/fixtures/subagents/` and are not formatted by Oxfmt.
+Root `mise` tasks delegate backend checks to the package.
+
 ```sh
-mise run verify    # Run formatting, lint, tests, and health checks.
-mise run test      # Run the headless test suite.
-mise run test bash # Run tests with "bash" in the name.
-mise run check     # Run :checkhealth pim in a clean instance.
-mise run fmt       # Format Lua files with Stylua.
-mise run fmt:check # Check Lua file format.
-mise run lint      # Type check with lua-language-server.
+mise install                         # Install Lua development tools.
+mise -C pi-extensions install        # Install backend development tools.
+mise -C pi-extensions exec -- pnpm install --frozen-lockfile
+mise run verify                      # Run all Lua and backend checks.
+mise run test                        # Run the headless Lua test suite.
+mise run test bash                   # Run Lua tests with "bash" in the name.
+mise -C pi-extensions run test       # Run backend tests, including Pi 0.85.1 loading checks.
+mise run check                       # Run :checkhealth pim in a clean instance.
+mise run fmt                         # Format Lua with Stylua and the backend with Oxfmt.
+mise run fmt:check                   # Check both formats without changing files.
+mise run lint                        # Run lua-language-server and Oxlint; warnings fail.
+mise run typecheck                   # Run strict tsgo checking on the backend and its tests.
+mise -C pi-extensions run verify     # Run backend checks only.
+mise -C pi-extensions run fmt        # Format the backend package only.
 ```
 
 Tests use `tests/fake_pi.lua`. This program simulates pi RPC responses. The

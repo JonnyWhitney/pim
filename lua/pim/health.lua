@@ -1,8 +1,5 @@
 local M = {}
 
-local MINIMUM_PI_VERSION = { 0, 84, 4 }
-local MINIMUM_PI_VERSION_TEXT = table.concat(MINIMUM_PI_VERSION, ".")
-
 local function parse_version(text)
 	local major, minor, patch = text:match("(%d+)%.(%d+)%.(%d+)")
 	if not major then
@@ -32,6 +29,8 @@ function M.check()
 	end
 
 	local config = require("pim.config").get()
+	local MINIMUM_PI_VERSION = { 0, 85, 1 }
+	local MINIMUM_PI_VERSION_TEXT = table.concat(MINIMUM_PI_VERSION, ".")
 	local command = type(config.pi_cmd) == "table" and vim.deepcopy(config.pi_cmd) or { config.pi_cmd }
 	local executable = command[1]
 	if vim.fn.executable(executable) == 1 then
@@ -59,6 +58,8 @@ function M.check()
 			"Install pi. Or set `pi_cmd` in require('pim').setup()."
 		)
 	end
+
+	require("pim.subagents").check(health)
 
 	local session_root = require("pim.config").pi_sessions_dir()
 	if vim.uv.fs_stat(session_root) then

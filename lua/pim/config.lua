@@ -2,6 +2,7 @@ local M = {}
 
 M.defaults = {
 	pi_cmd = "pi",
+	subagents = { enabled = true },
 	args = {},
 	keymaps = {
 		submit = "<CR><CR>",
@@ -78,6 +79,10 @@ local function validate(opts)
 		if type(opts[group]) ~= "table" then
 			fail(("%s must be a table"):format(group))
 		end
+	end
+
+	if type(opts.subagents.enabled) ~= "boolean" then
+		fail("subagents.enabled must be a boolean")
 	end
 
 	if type(opts.completion.respect_gitignore) ~= "boolean" then

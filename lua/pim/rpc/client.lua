@@ -132,11 +132,17 @@ function M.start(opts)
 	next_id = 0
 	reject_all_pending("pi restarted")
 
+	local activation, activation_error = require("pim.subagents").activation()
+	if not activation then
+		return false, activation_error
+	end
 	local cmd = build_cmd(opts and opts.extra_args)
+	vim.list_extend(cmd, activation.args)
 	log.clear()
 	log.add("*", "spawn: " .. table.concat(cmd, " "))
 	local handle, err = process.spawn({
 		cmd = cmd,
+		env = activation.env,
 		cwd = opts and opts.cwd or nil,
 		on_line = function(line)
 			if generation == current_generation then
