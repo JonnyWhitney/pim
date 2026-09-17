@@ -214,6 +214,10 @@ Calling setup() is optional. All options have default values.
       toggle_fold = "<Tab>",
     },
     input = { min_height = 3, max_height = 15 },
+    completion = {
+      respect_gitignore = true,
+      exclude = { "**/node_modules/**" },
+    },
     streaming_submit = "steer", -- Or "followUp".
     bash_passthrough = true,    -- Run prompts that start with ! or !! as shell commands.
     transcript = {
@@ -280,10 +284,156 @@ The input buffer has an 'omnifunc'. It can start automatically in two cases.
 - Type `/` as the first prompt character to complete pi slash commands. This
   includes extensions, prompt templates, and skills.
 - Type `@` at the start of a word to complete a file path. pim uses
-  `git ls-files` in a Git repository. Elsewhere it uses Neovim file completion.
+  `git ls-files` in a Git repository. Elsewhere, or after a failed Git query,
+  files are discovered recursively without another executable. Paths are relative
+  to the working directory. Directory symlinks are not followed. Unreadable or
+  disappearing entries are skipped. Git ignore rules are not applied by this
+  fallback.
+
+By default, Neovim's built-in omni menu is opened automatically in these
+contexts. Suggestions are matched by prefix, not fuzzily. These mappings and
+completion settings are applied only to the pim input buffer.
 
 pi expands @file references on the server. CTRL-X CTRL-O starts either
 completion manually.
+
+OPTIONAL BLINK INTEGRATION                               *pim-blink*
+
+A Blink source is bundled with pim. No separate source plugin is needed.
+Integration must be enabled explicitly through Blink's configuration. Installing
+Blink alone does not change native completion.
+
+This config callback can be added to an existing lazy.nvim Blink specification.
+Existing opts, including menus, keymaps, documentation, ghost text, and selection
+settings, are retained. A sources.default list or function must be supplied.
+>lua
+  config = function(_, opts)
+    opts.sources = require("pim.completion.blink").setup(opts.sources)
+    require("blink.cmp").setup(opts)
+  end,
+<
+pim must be available on runtimepath when this callback is run. With lazy.nvim,
+"JonnyWhitney/pim" can be added to Blink's existing dependencies. Other
+dependencies must be kept, including blink.lib for development Blink.
+
+For an existing setup with omni and lazydev, these source options can be retained:
+>lua
+  sources = {
+    default = { "lsp", "omni", "path", "buffer", "lazydev" },
+    providers = {
+      lazydev = { name = "LazyDev", module = "lazydev.integrations.blink" },
+      omni = {
+        enabled = function()
+          local omnifunc = vim.bo.omnifunc
+          return omnifunc ~= "" and omnifunc ~= "v:lua.vim.lsp.omnifunc"
+        end,
+      },
+    },
+    per_filetype = {
+      minifiles = { inherit_defaults = false },
+    },
+  },
+<
+lazydev is not required by pim. Other source lists can be supplied instead.
+The helper must be called once, after source options are assembled and before
+blink.cmp.setup. A new configuration is returned. Provider pim is registered
+with module pim.completion.blink and no fallbacks; the pim ID is reserved.
+Existing filetype overrides and inherit_defaults are composed into a dynamic
+default-source selector. Filetype overrides must not be added afterwards.
+
+Only pim suggestions are selected in valid input-buffer contexts, even when no
+candidates match. omni and other configured sources are retained elsewhere.
+Ordinary Markdown and transcript buffers are unaffected. Paths are matched
+fuzzily by Blink: @comp can match lua/pim/completion.lua. Command descriptions
+and source labels are retained. Explicit replacement ranges prevent duplicate
+sigils and respect completion.keyword.range, including full-range mid-token edits.
+
+No selection, insertion, or menu settings are overridden. In particular,
+preselect = false and auto_insert = false can be retained. Native omni mappings
+and option overrides are removed from an already attached buffer or skipped when
+Blink is configured first. Activation survives hide/show and stop/start. If Blink
+is disabled after activation, the integration callback must be omitted on the
+next Neovim start to restore the default backend. No automatic switch is made.
+
+Blink v1.10.0 is supported. Development v1.10.0-234-gf724653 has also been tested
+with blink.lib. Only documented source and configuration interfaces are used.
+Other Blink releases have not yet been verified. The optional tests require an
+installed Blink checkout; nothing is downloaded by the tests:
+>
+  mise run test:blink /path/to/blink.cmp '' lua
+  mise run test:blink /path/to/blink.cmp /path/to/blink.lib rust
+<
+Both load orders can be checked by appending blink-first. Real fuzzy matching,
+UTF-8, punctuation, automatic triggers, full-range edits, deletion, empty matches,
+selection, documentation, and normal/filetype sources are checked in a clean
+child Neovim instance. The default test suite requires no Blink dependency and
+includes a clean child Neovim check of automatic native popups.
+
+FILE FILTERING
+
+Git ignore filtering is enabled by completion.respect_gitignore by default.
+Standard rules from .gitignore, .git/info/exclude, and global exclusions are
+applied. Tracked files remain eligible even when matched by these rules.
+With respect_gitignore = false, ignored files and directory contents are
+included. No implicit exclusions are added for build outputs.
+
+Explicit completion.exclude globs are always applied, including to tracked
+files and recursive discovery outside Git or after a failed Git query. Root and
+nested node_modules directories and their contents are excluded by default.
+A supplied list replaces the defaults. An empty list disables glob exclusions.
+
+A glob is a path pattern with wildcards. Complete paths relative to the current
+working directory, not necessarily the Git root, are matched case-sensitively
+with / separators. * is matched within one path component; **/ is matched
+across zero or more directory levels. Examples:
+
+  *.log                  Root-level logs only.
+  **/*.log               Logs at any depth.
+  **/build/**            Build directories at any depth.
+  **/node_modules/**     Root and nested dependency directories and contents.
+  config/private.json    One exact relative path.
+
+Neovim's built-in glob syntax is used. Shell expansion, Git-style negation, and
+ordered re-inclusion are not supported. File paths, rather than directory
+placeholders, are offered. Quoted references and paths containing whitespace
+are not supported by the reference syntax.
+>lua
+  -- Only Git ignore filtering is disabled; node_modules remains excluded.
+  require("pim").setup({ completion = { respect_gitignore = false } })
+
+  -- The default pattern is repeated so it is retained with custom exclusions.
+  require("pim").setup({ completion = {
+    exclude = { "**/node_modules/**", "**/build/**", "*.log" },
+  } })
+
+  -- Both filters are disabled.
+  require("pim").setup({ completion = {
+    respect_gitignore = false, exclude = {},
+  } })
+<
+Complete candidate lists are cached for ten seconds by directory and completion
+settings. Setting changes are applied on the next request. Caches are cleared
+when completion is reset. Omni enumeration remains synchronous, with a
+two-second Git timeout. Large trees can therefore delay the native popup.
+No candidate limit is imposed. Explicit exclusions are applied as filters, not
+traversal pruning, so excluded directories may still be scanned.
+These settings affect picker candidates only. Manually entered @file references
+are not blocked. File access is not protected by these exclusions.
+
+The shared data API provides scheduled discovery for asynchronous consumers:
+  require("pim.completion.data").request_files(cwd, callback, is_current)
+A cancel function is returned. Git is run asynchronously. Recursive fallback is
+scheduled in batches of at most 128 entries. is_current must be supplied by the
+consumer to reject changed buffers or contexts. Directory/settings changes and
+resets are checked internally. Only complete, current results are cached and
+returned. This API is used by the bundled Blink source.
+
+Validation: mise run test completion
+A 2,049-file temporary tree is checked for complete enumeration and event-loop
+progress. Cancellation, failed Git, symlinks, and simulated filesystem failures
+are covered. Individual filesystem calls, Git decoding, sorting, and copying
+are not time-bounded. Slow filesystems or very large result sets may cause delays.
+The entire candidate list is held in memory.
 
 ==============================================================================
 6. EXTENSION DIALOGS                                        *pim-dialogs*

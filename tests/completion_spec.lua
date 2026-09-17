@@ -2,6 +2,7 @@ local h = require("helpers")
 local client = require("pim.rpc.client")
 local completion = require("pim.completion")
 local config = require("pim.config")
+local data = require("pim.completion.data")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
@@ -26,7 +27,150 @@ local function fixture_repo()
 	return repo
 end
 
+local function with_files(git, fn)
+	local root = vim.fn.tempname()
+	vim.fn.mkdir(root, "p")
+	local paths = {
+		"ignored.log",
+		"build/out.js",
+		"nested/build/out.js",
+		"node_modules/pkg/x.js",
+		"nested/node_modules/pkg/x.js",
+		"node_modules_backup/x.js",
+		"tracked.log",
+		"plain.txt",
+		"nested/other.log",
+		"config/private.json",
+		"UPPER.LOG",
+	}
+	for _, path in ipairs(paths) do
+		vim.fn.mkdir(vim.fs.dirname(root .. "/" .. path), "p")
+		vim.fn.writefile({ "fixture" }, root .. "/" .. path)
+	end
+	if git then
+		vim.system({ "git", "init", "-q", root }):wait()
+		vim.system({ "git", "-C", root, "config", "core.excludesFile", "/dev/null" }):wait()
+		vim.fn.writefile({ "*.log", "build/", "node_modules/" }, root .. "/.gitignore")
+		vim.system({ "git", "-C", root, "add", "-f", "tracked.log" }):wait()
+	end
+	local cwd = vim.fn.getcwd()
+	vim.cmd.cd(root)
+	local ok, err = pcall(fn, root)
+	vim.cmd.cd(cwd)
+	vim.fn.delete(root, "rf")
+	if not ok then
+		error(err, 0)
+	end
+end
+
 return {
+	["shared candidates are unfiltered and caller-owned"] = function()
+		refresh_from_fake_pi()
+		local commands = data.command_candidates()
+		h.eq(3, #commands)
+		commands[1].name = "changed"
+		commands[1].source = "changed"
+		h.ok(data.command_candidates()[1].name ~= "changed")
+		h.ok(data.command_candidates()[1].source ~= "changed")
+		with_files(true, function(root)
+			local paths = data.file_candidates(root)
+			h.ok(vim.tbl_contains(paths, "plain.txt"))
+			h.ok(vim.tbl_contains(paths, "tracked.log"))
+			h.eq(false, vim.tbl_contains(paths, "ignored.log"))
+			h.eq(false, vim.tbl_contains(paths, "node_modules/pkg/x.js"))
+			paths[1] = "changed"
+			h.eq(false, vim.tbl_contains(data.file_candidates(root), "changed"))
+			h.eq({}, completion.file_candidates("lain", root), "omni is not fuzzy")
+		end)
+		completion.reset()
+		h.eq({}, data.command_candidates())
+	end,
+
+	["Git filters and cache setting changes work together"] = function()
+		with_files(true, function(root)
+			local function offered(path)
+				return vim.tbl_contains(completion.file_candidates("", root), path)
+			end
+			for _, respect in ipairs({ true, false, true }) do
+				config.setup({ completion = { respect_gitignore = respect } })
+				h.eq(not respect, offered("ignored.log"))
+				h.eq(not respect, offered("build/out.js"))
+				h.ok(offered("tracked.log"))
+				h.ok(offered("plain.txt"))
+				h.ok(offered("node_modules_backup/x.js"))
+				h.eq(false, offered("node_modules/pkg/x.js"))
+				h.eq(false, offered("nested/node_modules/pkg/x.js"))
+				for _, path in ipairs(completion.file_candidates(".git", root)) do
+					h.eq(".gitignore", path)
+				end
+			end
+			config.setup({ completion = { respect_gitignore = false, exclude = {} } })
+			h.ok(offered("node_modules/pkg/x.js"))
+			h.ok(offered("nested/node_modules/pkg/x.js"))
+			config.setup({
+				completion = { respect_gitignore = false, exclude = { "*.log", "**/build/**", "config/private.json" } },
+			})
+			h.eq(false, offered("tracked.log"))
+			h.eq(false, offered("ignored.log"))
+			h.ok(offered("nested/other.log"))
+			h.ok(offered("UPPER.LOG"))
+			h.eq(false, offered("build/out.js"))
+			h.eq(false, offered("nested/build/out.js"))
+			h.eq(false, offered("config/private.json"))
+			config.setup({ completion = { respect_gitignore = false, exclude = { "**/*.log" } } })
+			h.eq(false, offered("nested/other.log"))
+			vim.fn.writefile({ "new" }, root .. "/new.txt")
+			h.eq(false, offered("new.txt"))
+			completion.reset()
+			h.ok(offered("new.txt"))
+			h.eq({ { word = "@plain.txt", menu = "file" } }, completion.omnifunc(0, "@plain"))
+			config.setup({ completion = { respect_gitignore = false, exclude = { "nested/*.log" } } })
+			vim.cmd.cd(root .. "/nested")
+			h.eq(
+				{ "other.log" },
+				completion.file_candidates("other", root .. "/nested"),
+				"patterns are relative to cwd"
+			)
+		end)
+	end,
+
+	["non-Git and failed Git discovery is recursive and filtered"] = function()
+		for _, git in ipairs({ false, true }) do
+			with_files(git, function(root)
+				local original = vim.system
+				---@diagnostic disable-next-line: duplicate-set-field
+				vim.system = function()
+					return {
+						wait = function()
+							return { code = 1 }
+						end,
+					}
+				end
+				local ok, err = pcall(function()
+					local paths = data.file_candidates(root)
+					h.ok(vim.tbl_contains(paths, "nested/other.log"))
+					h.ok(vim.tbl_contains(paths, "ignored.log"), "fallback does not apply Git ignores")
+					h.eq(false, vim.tbl_contains(paths, "node_modules/pkg/x.js"))
+					config.setup({ completion = { exclude = {} } })
+					h.ok(vim.tbl_contains(data.file_candidates(root), "node_modules/pkg/x.js"))
+				end)
+				vim.system = original
+				if not ok then
+					error(err, 0)
+				end
+				config.setup()
+				completion.reset()
+			end)
+		end
+	end,
+
+	["non-Git omni matching remains prefix based"] = function()
+		with_files(false, function(root)
+			h.eq({ "node_modules_backup/x.js" }, completion.file_candidates("node_modules", root))
+			h.eq({}, completion.file_candidates("other", root))
+			h.eq({ "nested/other.log" }, completion.file_candidates("nested/other", root))
+		end)
+	end,
 	["slash context: only at the very start of the prompt"] = function()
 		h.eq(0, (completion.parse_context("/mo", 3, 1)))
 		h.eq(0, (completion.parse_context("/", 1, 1)))

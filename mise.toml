@@ -7,6 +7,10 @@ lua-language-server = "3.18.2"
 description = "Run the headless test suite"
 run = "nvim -l tests/run.lua"
 
+[tasks."test:blink"]
+description = "Run optional real-Blink checks against a supplied checkout"
+run = "nvim -l tests/blink_integration.lua"
+
 [tasks.check]
 description = "Run :checkhealth pim in a clean headless instance"
 run = """
@@ -24,8 +28,8 @@ run = ["mise run fmt:check", "mise run lint", "mise run test", "mise run check"]
 
 [tasks.fmt]
 description = "Format the Lua sources with stylua"
-run = "stylua lua plugin tests"
+run = "stylua lua plugin tests examples"
 
 [tasks."fmt:check"]
 description = "Fail if any Lua source is unformatted"
-run = "stylua --check lua plugin tests"
+run = "stylua --check lua plugin tests examples"
