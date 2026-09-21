@@ -40,6 +40,27 @@ local function wait_height(win, expected, what)
 end
 
 return {
+	["manually entered file references are submitted unchanged"] = function()
+		fresh()
+		local original = client.prompt
+		local submitted
+		---@diagnostic disable-next-line: duplicate-set-field
+		client.prompt = function(text, _, callback)
+			submitted = text
+			callback(true, {})
+		end
+		local text = "Inspect @~/config @./src @../other and `@config`"
+		local ok, err = pcall(function()
+			vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { text })
+			input.submit()
+			h.eq(text, submitted)
+		end)
+		client.prompt = original
+		if not ok then
+			error(err, 0)
+		end
+	end,
+
 	["input window grows and shrinks with content, clamped"] = function()
 		fresh()
 		local win = assert(layout.input_win())
