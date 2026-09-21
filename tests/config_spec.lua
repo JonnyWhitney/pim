@@ -26,35 +26,10 @@ local function with_agent_dir(directory, fn)
 end
 
 return {
-	["completion defaults and list replacement are validated"] = function()
-		h.eq({ respect_gitignore = true, exclude = { "**/node_modules/**" } }, config.setup().completion)
-		for _, value in ipairs({ true, false }) do
-			for _, exclude in ipairs({ {}, { "*.log", "config/private.json" } }) do
-				h.eq(nil, setup_capturing_warning({ completion = { respect_gitignore = value, exclude = exclude } }))
-				h.eq({ respect_gitignore = value, exclude = exclude }, config.get().completion)
-			end
-		end
-		h.eq({ "**/node_modules/**" }, config.defaults.completion.exclude)
-		local warning = assert(setup_capturing_warning({ completion = { typo = true } }))
-		h.ok(warning:find("completion.typo", 1, true))
-	end,
-
-	["invalid completion settings are rejected"] = function()
-		for _, value in ipairs({ false, 1, "yes" }) do
-			h.fails(function()
-				config.setup({ completion = value })
-			end, "completion must be a table")
-		end
-		for _, value in ipairs({ 1, "yes", {} }) do
-			h.fails(function()
-				config.setup({ completion = { respect_gitignore = value } })
-			end, "completion.respect_gitignore")
-		end
-		for _, value in ipairs({ false, "*.log", { named = "x" }, { [2] = "x" }, { "" }, { false }, { 1 }, { "[" } }) do
-			h.fails(function()
-				config.setup({ completion = { exclude = value } })
-			end, "completion.exclude")
-		end
+	["removed completion settings are reported as unknown"] = function()
+		h.eq(nil, config.setup().completion)
+		local warning = assert(setup_capturing_warning({ completion = { respect_gitignore = false, exclude = {} } }))
+		h.ok(warning:find("completion", 1, true))
 	end,
 	["message decorations can be independently configured or disabled"] = function()
 		local opts =

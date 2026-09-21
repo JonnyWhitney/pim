@@ -52,11 +52,13 @@ local function connect(extra_args)
 	local transcript = require("pim.ui.transcript")
 
 	state.reset()
+	require("pim.completion.data").reset()
 	local started, spawn_error = client.start({
 		extra_args = extra_args,
 		on_event = require("pim.events").handle,
 		on_ui_request = require("pim.ui.dialogs").handle,
 		on_exit = function(code, intentional, stderr_tail)
+			require("pim.completion.data").reset()
 			require("pim.ui.dialogs").reset()
 			require("pim.ui.tree").reset()
 			transcript.divider(("*pi exited (code %d%s)*"):format(code, intentional and ", requested" or ""))
@@ -115,7 +117,6 @@ function M.start()
 	layout.open()
 	setup_transcript_keymaps()
 	require("pim.ui.input").setup()
-	require("pim.completion").attach()
 	require("pim.ui.statusline").attach()
 	M.watch_input_close()
 

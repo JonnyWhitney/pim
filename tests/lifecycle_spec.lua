@@ -481,7 +481,7 @@ return {
 		h.settle(50)
 		h.eq({ "" }, vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "input history was reset")
 		h.eq({ "" }, vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false), "transcript was reset")
-		h.eq({}, require("pim.completion").omnifunc(0, "/"), "slash-command completion was reset")
+		h.eq({}, require("pim.completion.data").command_candidates(), "slash-command completion was reset")
 	end,
 
 	["log clears for a new process but not session changes, toggles, or stop"] = function()

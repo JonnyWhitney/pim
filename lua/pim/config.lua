@@ -13,10 +13,6 @@ M.defaults = {
 		min_height = 3,
 		max_height = 15,
 	},
-	completion = {
-		respect_gitignore = true,
-		exclude = { "**/node_modules/**" },
-	},
 	streaming_submit = "steer",
 	bash_passthrough = true,
 	transcript = {
@@ -77,24 +73,6 @@ local function validate(opts)
 	for _, group in ipairs(option_groups()) do
 		if type(opts[group]) ~= "table" then
 			fail(("%s must be a table"):format(group))
-		end
-	end
-
-	if type(opts.completion.respect_gitignore) ~= "boolean" then
-		fail("completion.respect_gitignore must be a boolean")
-	end
-	local exclude = opts.completion.exclude
-	if type(exclude) ~= "table" or not vim.islist(exclude) then
-		fail("completion.exclude must be a list of nonempty strings")
-	end
-	for i, pattern in ipairs(exclude) do
-		local setting = "completion.exclude[" .. i .. "]"
-		if type(pattern) ~= "string" or pattern == "" then
-			fail(setting .. " must be a nonempty string")
-		end
-		local ok, err = pcall(vim.glob.to_lpeg, pattern)
-		if not ok then
-			fail(setting .. ": " .. tostring(err))
 		end
 	end
 

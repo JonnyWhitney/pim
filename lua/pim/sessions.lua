@@ -62,7 +62,7 @@ function M.refresh()
 			require("pim.events").load_messages(data.messages)
 		end
 	end)
-	require("pim.completion").refresh_commands()
+	require("pim.completion.data").refresh_commands()
 end
 
 function M.new()

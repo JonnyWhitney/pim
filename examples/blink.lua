@@ -1,8 +1,11 @@
--- This callback is assigned to `config` in an existing lazy.nvim Blink spec.
--- Existing source options must be assembled first, including sources.default.
--- pim must be available on runtimepath (for example, as a Blink dependency).
--- Existing menu, keymap, selection, and documentation options are passed through.
-return function(_, opts)
-	opts.sources = require("pim.completion.blink").setup(opts.sources)
-	require("blink.cmp").setup(opts)
-end
+-- These source options are merged into an existing Blink configuration.
+-- pim must be available on runtimepath, for example as a Blink dependency.
+-- Existing providers, filetype overrides, and menu options should be retained.
+return {
+	sources = {
+		default = { "lsp", "omni", "path", "buffer", "pim" },
+		providers = {
+			pim = { name = "pim", module = "pim.completion.blink" },
+		},
+	},
+}
