@@ -159,10 +159,12 @@ return {
 				},
 			})
 		)
-		append(value.agents[2].transcriptPath, vim.json.encode({
-			timestamp = "now",
-			record = { type = "status", status = "completed" },
-		}) .. "\n")
+		for _, status in ipairs({ "running", "completed" }) do
+			append(value.agents[2].transcriptPath, vim.json.encode({
+				timestamp = "now",
+				record = { type = "status", status = status },
+			}) .. "\n")
+		end
 
 		with_root(root, function()
 			local invocation = subagent_state.update("call-1", value, nil, false)
@@ -170,6 +172,8 @@ return {
 			local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 			h.ok(text:find("## parser review [running]", 1, true))
 			h.ok(text:find("## test review [completed]", 1, true))
+			h.eq(nil, text:find("Status: **running**", 1, true), "historical statuses are hidden")
+			h.eq(nil, text:find("Status: **completed**", 1, true), "the heading is authoritative")
 			h.ok(text:find("1 malformed JSONL record", 1, true))
 			h.eq(nil, text:find("partial answer", 1, true), "an incomplete final line is retained")
 

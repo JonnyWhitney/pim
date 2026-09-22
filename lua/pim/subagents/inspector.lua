@@ -110,8 +110,6 @@ local function append_record(lines, record)
 	elseif record.type == "malformed" or record.type == "incomplete" then
 		lines[#lines + 1] = ""
 		lines[#lines + 1] = "**Transcript error:** " .. tostring(record.type)
-	elseif record.type == "status" then
-		lines[#lines + 1] = "Status: **" .. tostring(record.status) .. "**"
 	end
 end
 
