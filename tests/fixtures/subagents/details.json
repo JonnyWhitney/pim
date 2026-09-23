@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"invocationId": "invocation-123",
+	"mode": "parallel",
+	"status": "running",
+	"transcriptDir": "/data/pim/subagents/parent-123/invocation-123",
+	"agents": [
+		{
+			"id": "child-1",
+			"label": "parser review",
+			"status": "completed",
+			"transcriptPath": "/data/pim/subagents/parent-123/invocation-123/child-1.jsonl",
+			"summary": "No defects found.",
+			"usage": null,
+			"stoppedBy": null
+		},
+		{
+			"id": "child-2",
+			"label": "test review",
+			"status": "running",
+			"transcriptPath": "/data/pim/subagents/parent-123/invocation-123/child-2.jsonl",
+			"summary": null,
+			"usage": null,
+			"stoppedBy": null
+		}
+	]
+}

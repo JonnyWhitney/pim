@@ -1,0 +1,27 @@
+[tools]
+node = "24.21.0"
+pnpm = "12.4.2"
+
+[tasks.test]
+description = "Run the Pi extension tests"
+run = "pnpm test"
+
+[tasks.typecheck]
+description = "Type-check the Pi extension and its tests with tsgo"
+run = "pnpm run typecheck"
+
+[tasks.lint]
+description = "Lint the Pi extension and its tests with Oxlint"
+run = "pnpm run lint"
+
+[tasks.fmt]
+description = "Format only the Pi extension package with Oxfmt"
+run = "pnpm run fmt"
+
+[tasks."fmt:check"]
+description = "Check the Pi extension package format"
+run = "pnpm run fmt:check"
+
+[tasks.verify]
+description = "Run all Pi extension checks"
+run = ["pnpm run fmt:check", "pnpm run lint", "pnpm run typecheck", "pnpm test"]

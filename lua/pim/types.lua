@@ -66,6 +66,38 @@
 ---@field summary string|nil
 ---@field tokensBefore number|nil
 
+---@alias PimSubagentStatus "pending"|"running"|"completed"|"failed"|"stopped"|"aborted"
+
+---@class PimSubagentAgent
+---@field id string
+---@field label string
+---@field status PimSubagentStatus
+---@field transcriptPath string
+---@field summary string|nil
+---@field usage table|nil
+---@field stoppedBy "user"|"parent_abort"|nil
+
+---@class PimSubagentDetails
+---@field schemaVersion 1
+---@field invocationId string
+---@field mode "single"|"parallel"
+---@field status PimSubagentStatus
+---@field transcriptDir string
+---@field agents PimSubagentAgent[]
+---@field parentSessionId string|nil
+---@field parentSessionFile string|nil
+---@field toolCallId string|nil
+---@field createdAt string|nil
+---@field updatedAt string|nil
+
+---@class PimSubagentInvocation
+---@field invocation_id string
+---@field tool_call_id string
+---@field details PimSubagentDetails
+---@field arguments table|nil
+---@field historical boolean
+---@field parent_session_id string|nil
+
 ---@class PimToolResult
 ---@field [string] any
 ---@field content PimMessageContent|nil

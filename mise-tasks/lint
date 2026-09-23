@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Type-check all Lua files with lua-language-server"
+#MISE description="Check Lua with lua-language-server and lint the Pi extension with Oxlint"
 set -euo pipefail
 
 # lua-language-server needs the Neovim runtime to type vim.* APIs. Resolve
@@ -20,3 +20,5 @@ lua-language-server --check "$PWD" \
 	--checklevel=Warning \
 	--configpath="$workdir/luarc.json" \
 	--logpath="$workdir/log"
+
+mise -C pi-extensions run lint

@@ -1,0 +1,28 @@
+{
+	"name": "pim-backend",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"preinstall": "node scripts/check-node.mjs",
+		"test": "node scripts/check-node.mjs && tsx --test tests/subagents/*.test.ts",
+		"typecheck": "node scripts/check-node.mjs && tsgo --noEmit",
+		"lint": "node scripts/check-node.mjs && oxlint --deny-warnings subagents tests scripts",
+		"fmt": "node scripts/check-node.mjs && oxfmt --write subagents tests scripts package.json tsconfig.json .oxlintrc.json .oxfmtrc.json pnpm-workspace.yaml",
+		"fmt:check": "node scripts/check-node.mjs && oxfmt --check subagents tests scripts package.json tsconfig.json .oxlintrc.json .oxfmtrc.json pnpm-workspace.yaml"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-ai": "0.85.1",
+		"@earendil-works/pi-coding-agent": "0.85.1",
+		"@types/node": "24.13.5",
+		"@typescript/native-preview": "7.0.0-dev.20260707.2",
+		"oxfmt": "0.68.0",
+		"oxlint": "1.83.0",
+		"tsx": "^4.20.0",
+		"typebox": "^1.0.0",
+		"typescript": "7.0.2"
+	},
+	"engines": {
+		"node": "^24.21.0"
+	},
+	"packageManager": "pnpm@12.4.2"
+}

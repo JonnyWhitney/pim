@@ -1,0 +1,15 @@
+{
+	"agents": [
+		{
+			"label": "parser review",
+			"prompt": "Review the parser changes.",
+			"systemPrompt": "Report concrete correctness defects.",
+			"systemPromptMode": "append",
+			"context": "Nested expressions were recently added.",
+			"projectContext": true,
+			"tools": ["read", "grep", "find", "ls"],
+			"model": "anthropic/claude-sonnet-4-6",
+			"thinkingLevel": "high"
+		}
+	]
+}

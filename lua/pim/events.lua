@@ -82,6 +82,12 @@ local function handle_tool_event(event)
 	elseif final then
 		result = event.result
 	end
+	if event.toolName == "subagent" and result ~= nil then
+		local invocation = require("pim.subagents.state").observe(event.toolCallId, result, arguments)
+		if invocation then
+			require("pim.subagents.inspector").refresh(invocation.invocation_id)
+		end
+	end
 	local execution = {
 		toolName = event.toolName,
 		args = arguments,
@@ -200,6 +206,7 @@ local function apply_message_update(event)
 end
 
 function M.reset()
+	require("pim.subagents.state").reset()
 	message_counter = 0
 	current_key = nil
 	current_message = nil
@@ -264,6 +271,19 @@ function M.load_messages(messages)
 	transcript.reset()
 	for _, message in ipairs(messages or {}) do
 		remember_tool_calls(message)
+		if
+			type(message) == "table"
+			and message.role == "toolResult"
+			and message.toolName == "subagent"
+			and type(message.toolCallId) == "string"
+		then
+			require("pim.subagents.state").observe(
+				message.toolCallId,
+				{ details = message.details },
+				tool_arguments[message.toolCallId],
+				true
+			)
+		end
 		transcript.set(next_key(), "message", message_renderer.render(message, render_opts()), { final = true })
 	end
 end

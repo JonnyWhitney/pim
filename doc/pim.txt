@@ -36,8 +36,11 @@ hidden. Folds can be toggled with <Tab> or native Neovim fold commands.
 Manual choices are preserved per window during updates. Defaults are reapplied
 when history is reloaded or a buffer or window is recreated.
 
-pim targets Neovim nightly and requires Pi 0.84.4 or newer. It has no plugin
-dependencies. Other Neovim releases are not supported.
+Neovim nightly and Pi 0.85.1 or newer are required. The backend is tested
+against Pi 0.85.1. Subagents are enabled by default.
+The Neovim client is written in Lua without plugin dependencies.
+A bundled TypeScript backend is executed by Pi. No user build step is required.
+Other Neovim releases are not supported.
 
 The transcript winbar shows the provider, model, thinking level, pi
 configuration directory, and context usage. Context usage has the form
@@ -133,6 +136,21 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 :PiThinking                                                      *:PiThinking*
     Select a thinking level that the current model supports. pim gets this
     list from pi. Older pi versions use a compatible fallback list.
+
+:PiAgents[!]                                                        *:PiAgents*
+    Select and open a subagent invocation from the current parent session.
+    Use [!] to include retained invocations from other parent sessions.
+
+:PiAgentTranscript                                        *:PiAgentTranscript*
+    Select and open a subagent transcript from the current parent session.
+
+:PiAgentStop[!]
+    An active child is selected and stopped. With !, an invocation is stopped.
+    The parent run is not aborted. See |:PiAgentStop|.
+
+:PiAgentClean[!]
+    Orphaned transcripts are cleaned. With !, the grace period is bypassed.
+    Active and ambiguous records are retained. See |:PiAgentClean|.
 
 :PiRestart                                                        *:PiRestart*
     Restart pi. pim resumes the current session if its session file exists.
@@ -429,5 +447,149 @@ has already selected its default response. This affects appearance only. UI
 plugins can provide automatic closing.
 
 Queued steer and follow-up messages use virtual lines. You cannot yank them.
+
+==============================================================================
+SUBAGENTS                                                     *pim-subagents*
+
+Dynamic children are created by the calling model through the subagent tool.
+No role definitions or agent files are loaded. The backend is enabled only in
+PIM RPC mode. Native Pi terminal rendering is not provided.
+
+Activation can be disabled through |pim-setup|: >lua
+  require("pim").setup({ subagents = { enabled = false } })
+<
+When disabled, no backend argument or private host environment is added.
+Unknown nested configuration keys are reported with their full paths.
+The bundle and transcript root are checked by :checkhealth pim. Startup is
+rejected if the enabled bundle is missing. Imports are supplied by Pi.
+
+Tool input uses one agents array with one to eight entries: >json
+  {"agents":[{"label":"review","prompt":"Review the parser.",
+    "tools":["read","grep","find","ls"],
+    "model":"anthropic/claude-sonnet-4-6","thinkingLevel":"high"}]}
+<
+Required fields: label, prompt, tools, model, thinkingLevel.
+An empty tools array is permitted. An exact provider/model identifier is
+required. Thinking levels are off, minimal, low, medium, high, xhigh, max.
+Levels may be clamped by Pi for the selected model.
+No model, tools, thinking level, or parent conversation is inherited.
+
+Optional fields:
+  systemPrompt       Caller-supplied system instructions.
+  systemPromptMode   append (default) or replace. A nonempty replacement is
+                     required. Enabled project context may still be added.
+  context            Additional caller text, separated from the task.
+  projectContext     true (default) or false.
+  cwd                Child directory; the parent directory is used by default.
+
+Task text is supplied through standard input. System prompts are supplied
+through temporary files with user-only permissions and removed afterward.
+Project resources are approved only when the parent project is trusted and
+its canonical cwd is unchanged. Trust is not transferred to a different cwd.
+With projectContext=false, context files, extension discovery, skills, and
+prompt-template discovery are disabled. Model settings and credentials remain
+available. A private child policy guard is explicitly loaded in every child.
+These controls are not an operating-system sandbox.
+
+At most four child processes are run across all calls. Parallel tool lists are
+restricted to built-in read, grep, find, ls. Extension discovery is disabled
+in parallel mode to prevent overrides. All parallel lists are checked before
+execution. A single child can use any available Pi tool except subagent.
+Unknown tools and unresolved models are reported as child failures. Other
+children are not stopped by one child's failure.
+
+Parent abort terminates all children with SIGTERM. SIGKILL is sent after
+5000 ms if needed. Final results and nested usage are returned in input order.
+Parent output is capped at 50 KiB and 2000 lines in aggregate. A smaller
+per-child share is used for parallel output. Truncation is marked. Details
+contain bounded summaries and file references, not the full child history.
+
+Storage:
+  stdpath("data")/pim/subagents/<parent-session-id>/<invocation-id>/
+    invocation.json
+    <child-id>.jsonl
+    <child-id>.summary.json
+
+Full events, configuration, thinking, tool calls, usage, and final output are
+stored. Directories use 0700; files use 0600. Symlink storage paths are
+rejected. Manifests are replaced atomically. Complete JSONL records remain
+readable after interruption. Sensitive prompts and outputs may be included. No automatic cleanup is
+performed.
+
+The parent transcript renders only the child count and aggregate statuses.
+Use |:PiAgents| or |:PiAgentTranscript| to open a read-only inspector. One
+pim://subagents/<invocation-id> buffer is reused for each invocation. Parallel
+children have separate foldable sections. Live parent updates cause only new
+complete JSONL records to be read. Completed transcripts can be reopened after
+a restart. Incomplete final lines are retained until they are completed.
+Malformed records are reported and skipped. Later valid records still render.
+Missing or unsafe transcript paths are shown as unavailable.
+
+:PiAgentStop                                                *:PiAgentStop*
+  One active child is selected and stopped without aborting the parent.
+:PiAgentStop!
+  An invocation is selected. All active and queued children are stopped.
+
+SIGTERM is followed by SIGKILL after 5000 ms when needed. Stopped children
+are recorded as stopped with stoppedBy: "user". After termination and durable
+transcript acknowledgement, one normal RPC steering message is queued for the
+parent. Stop-all labels are combined in one message. Duplicate, completed,
+failed, or unacknowledged requests are not used for steering. Parent aborts
+remain aborted with stoppedBy: "parent_abort" and are not used for steering.
+
+:PiAgentClean                                               *:PiAgentClean*
+  Eligible orphaned transcript directories are removed. Removed, retained,
+  and skipped counts are reported.
+:PiAgentClean!
+  The grace period is bypassed for orphans only.
+
+Transcripts are retained while the parent session file exists. Missing parent
+files are first recorded in private orphaned.json files during cleanup. The
+orphan grace period starts at that observation, not the last child update.
+The default is 30 days. A nonnegative whole number is required:
+>
+  require("pim").setup({ subagents = { orphan_grace_days = 30 } })
+<
+With 0, eligible orphans are removed during the first cleanup. No cleanup is
+run automatically. Active invocations, including stored pending or running
+states after interruption, are retained even with !. Invalid manifests,
+missing parent-file references, symlinks, unexpected files, and ambiguous
+paths are reported and skipped. Interrupted active records require manual
+review. Activity is not inferred from age. These checks are not a sandbox
+against concurrent filesystem changes.
+
+==============================================================================
+DEVELOPMENT                                                   *pim-development*
+
+Node.js 24.21.0 (the latest LTS release) and pnpm 12.4.2 are pinned in
+pi-extensions/mise.toml. These tool versions are scoped to pi-extensions/.
+Node.js 24.21.0 or a newer 24.x release is required for backend development.
+Other Node.js majors are rejected by the backend development commands.
+Pi API development dependencies are pinned to 0.85.1.
+
+Strict type checking is provided by tsgo from @typescript/native-preview.
+TypeScript 7.0.2 is included for editors. Linting is provided by Oxlint 1.83.0;
+formatting is provided by Oxfmt 0.68.0. The extension and its tests are covered.
+No development toolchain is required by the Neovim client.
+
+The TypeScript package, lockfile, configs, dependencies, scripts, and tests
+are contained in pi-extensions/. Oxfmt is restricted to that package. No
+Oxfmt config is applied to the repository root or Lua client. Shared JSON
+fixtures remain in tests/fixtures/subagents/ and are not formatted by Oxfmt.
+Backend checks are delegated by the root mise tasks.
+
+  mise install                    Install Lua development tools.
+  mise -C pi-extensions install    Install backend development tools.
+  mise -C pi-extensions exec -- pnpm install --frozen-lockfile
+                                  Install locked backend dependencies.
+  mise run fmt                    Format Lua and the Pi extension.
+  mise run fmt:check              Check both formats without changes.
+  mise run lint                   Run lua-language-server and Oxlint.
+  mise run typecheck              Run strict tsgo checking.
+  mise run verify                 Run all checks, tests, and health checks.
+  mise -C pi-extensions run verify Run backend checks only.
+  mise -C pi-extensions run fmt    Format the backend package only.
+
+Formatting differences, lint warnings, and type errors are rejected by verify.
 
 vim:tw=78:ts=8:noet:ft=help:norl:
