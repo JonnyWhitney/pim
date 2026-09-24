@@ -77,26 +77,51 @@ function M.flatten(tree, leaf_id)
 		return visible
 	end
 
+	local function is_assistant(node)
+		local entry = node.entry
+		return entry.type == "message" and type(entry.message) == "table" and entry.message.role == "assistant"
+	end
+
 	local function visit(nodes, prefix, nested)
 		nodes = visible_nodes(nodes)
 		for index, node in ipairs(nodes) do
 			local entry = node.entry
-			if type(entry) == "table" then
-				local last = index == #nodes
-				local branch = nested and (last and "└─ " or "├─ ") or ""
-				local label = type(node.label) == "string" and node.label ~= "" and (" [" .. node.label .. "]") or ""
-				local marker = entry.id == leaf_id and "● " or "  "
-				rows[#rows + 1] = {
-					entry = entry,
-					id = entry.id,
-					line = marker .. prefix .. branch .. M.summary(entry) .. label,
-				}
-				local child_prefix = prefix
-				if nested then
-					child_prefix = child_prefix .. (last and "   " or "│  ")
+			local last = index == #nodes
+			local branch = nested and (last and "└─ " or "├─ ") or ""
+			local label = type(node.label) == "string" and node.label ~= "" and (" [" .. node.label .. "]") or ""
+			local marker = entry.id == leaf_id and "● " or "  "
+			local tail = node
+			local count = 1
+			if is_assistant(node) and label == "" then
+				while true do
+					local children = visible_nodes(tail.children)
+					local child = children[1]
+					if
+						#children ~= 1
+						or not child
+						or not is_assistant(child)
+						or (child.label and child.label ~= "")
+					then
+						break
+					end
+					tail = child
+					count = count + 1
+					if child.entry.id == leaf_id then
+						marker = "● "
+					end
 				end
-				visit(node.children, child_prefix, true)
 			end
+			local summary = M.summary(entry) .. (count > 1 and (" x %d"):format(count) or "")
+			rows[#rows + 1] = {
+				entry = tail.entry,
+				id = tail.entry.id,
+				line = marker .. prefix .. branch .. summary .. label,
+			}
+			local child_prefix = prefix
+			if nested then
+				child_prefix = child_prefix .. (last and "   " or "│  ")
+			end
+			visit(tail.children, child_prefix, true)
 		end
 	end
 

@@ -92,6 +92,76 @@ return {
 			)
 		)
 	end,
+	["consecutive pi responses share one row without changing preview paths"] = function()
+		local function message(id, role, text, children)
+			return {
+				entry = { type = "message", id = id, message = { role = role, content = text } },
+				children = children,
+			}
+		end
+		local data = {
+			message("prompt", "user", "Start", {
+				message("first", "assistant", "[response]", {
+					message("result", "toolResult", "output", {
+						message("second", "assistant", "[response]", {
+							message("third", "assistant", "[response]", {
+								message("followup", "user", "Continue"),
+							}),
+						}),
+					}),
+				}),
+			}),
+		}
+		local original = vim.deepcopy(data)
+		local rows = tree.flatten(data, "third")
+		h.eq(
+			{ "prompt", "third", "followup" },
+			vim.tbl_map(function(row)
+				return row.id
+			end, rows)
+		)
+		h.eq(
+			{ "  You: Start", "● └─ pi: [response] x 3", "     └─ You: Continue" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		h.eq(
+			{ "user", "assistant", "toolResult", "assistant", "assistant" },
+			vim.tbl_map(function(message)
+				return message.role
+			end, assert(tree.preview_messages(data, rows[2].id)))
+		)
+		h.eq(original, data)
+	end,
+	["pi response groups stop at branches and labels"] = function()
+		local function assistant(id, children, label)
+			return {
+				entry = { type = "message", id = id, message = { role = "assistant", content = id } },
+				children = children,
+				label = label,
+			}
+		end
+		local rows = tree.flatten(
+			{ assistant("first", {
+				assistant("second", { assistant("branch-a"), assistant("branch-b") }),
+			}) },
+			"branch-b"
+		)
+		h.eq(
+			{ "  pi: first x 2", "  ├─ pi: branch-a", "● └─ pi: branch-b" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		local labeled = tree.flatten({ assistant("first", { assistant("second", nil, "saved") }) }, "second")
+		h.eq(
+			{ "  pi: first", "● └─ pi: second [saved]" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, labeled)
+		)
+	end,
 	["flatten renders branch order, labels, and the active leaf"] = function()
 		local rows = tree.flatten({
 			{
