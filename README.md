@@ -102,9 +102,10 @@ when history is reloaded or a buffer or window is recreated.
 ### Tree explorer
 
 `:PiTree` replaces the transcript with a plain-text session tree and disables
-prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
-fork a selected user prompt, and `c` to clone the active branch. Pi responses
-are folded by default. Use `za` to expand a group. Tool calls and results are
+prompts. Navigate with normal buffer motions, including `j`, `k`, `gg`, and
+`G`. Use `p` to preview an entry and `r` to fork a selected user prompt.
+Both require the cursor to be on an entry. Use `c` to clone the active branch.
+Pi responses are folded by default. Use `za` to expand a group. Tool calls and results are
 listed inside it by tool name, such as `pi: [tool call - read]` and
 `pi: [result - read]`.
 In a preview, `q` returns to the tree. In the tree, `<CR>` or `q` restores the

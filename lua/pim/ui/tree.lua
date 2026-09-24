@@ -44,7 +44,7 @@ local function clear_keymaps()
 	if not current or not vim.api.nvim_buf_is_valid(current.buf) then
 		return
 	end
-	for _, lhs in ipairs({ "j", "k", "<CR>", "p", "r", "c", "q" }) do
+	for _, lhs in ipairs({ "<CR>", "p", "r", "c", "q" }) do
 		pcall(vim.keymap.del, "n", lhs, { buffer = current.buf })
 	end
 end
@@ -62,7 +62,7 @@ local function selected_index()
 		return current.selected_index
 	end
 	local line = vim.api.nvim_win_get_cursor(win)[1]
-	return current.index_by_line[line] or current.selected_index
+	return current.index_by_line[line]
 end
 
 local function select_index(index)
@@ -90,18 +90,11 @@ local function select_index(index)
 	current.selected_index = index
 end
 
-local function move(amount)
-	local index = selected_index()
-	if index then
-		select_index(index + amount)
-	end
-end
-
 ---@param current PimTreeView
 local function render_tree(current)
 	local lines = {
 		"# pi tree",
-		"j/k: move · za: expand/collapse · p: preview · r: fork · c: clone · <CR>/q: close",
+		"Navigate with normal buffer motions · za: expand/collapse · p: preview · r: fork · c: clone · <CR>/q: close",
 		"Input is disabled while the tree is open.",
 		"",
 	}
@@ -160,12 +153,6 @@ end
 ---@param current PimTreeView
 local function set_tree_keymaps(current)
 	local buf = current.buf
-	vim.keymap.set("n", "j", function()
-		move(1)
-	end, { buffer = buf, desc = "Next pi tree entry" })
-	vim.keymap.set("n", "k", function()
-		move(-1)
-	end, { buffer = buf, desc = "Previous pi tree entry" })
 	vim.keymap.set("n", "p", M.preview, { buffer = buf, desc = "Preview pi tree entry" })
 	vim.keymap.set("n", "r", M.fork_selected, { buffer = buf, desc = "Fork pi tree prompt" })
 	vim.keymap.set("n", "c", M.clone, { buffer = buf, desc = "Clone pi branch" })
@@ -255,7 +242,11 @@ end
 function M.preview()
 	local current = view
 	local row = M.selected()
-	if not current or current.mode ~= "tree" or not row or type(row.id) ~= "string" then
+	if not current or current.mode ~= "tree" then
+		return
+	end
+	if not row or type(row.id) ~= "string" then
+		vim.notify("[pim] Select a valid tree entry to preview", vim.log.levels.WARN)
 		return
 	end
 	local messages = session_tree.preview_messages(current.tree, row.id)
@@ -329,7 +320,11 @@ end
 function M.fork_selected()
 	local current = view
 	local row = M.selected()
-	if not current or current.mode ~= "tree" or not row then
+	if not current or current.mode ~= "tree" then
+		return
+	end
+	if not row then
+		vim.notify("[pim] Select a user prompt to fork", vim.log.levels.WARN)
 		return
 	end
 	local message = row.entry.message

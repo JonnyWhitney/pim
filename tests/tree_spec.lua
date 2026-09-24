@@ -216,6 +216,48 @@ return {
 		)
 	end,
 
+	["G then k uses normal buffer navigation"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		local win = assert(layout.transcript_win())
+		feed("G")
+		local last_line = vim.api.nvim_win_get_cursor(win)[1]
+		h.eq(vim.api.nvim_buf_line_count(assert(layout.transcript_buf())), last_line)
+		feed("k")
+		h.ok(vim.api.nvim_win_get_cursor(win)[1] < last_line, "k moves up past closed folds")
+		feed("j")
+		h.eq(last_line, vim.api.nvim_win_get_cursor(win)[1], "j returns to the last line")
+	end,
+
+	["p and r require the cursor to be on a tree entry"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		feed("j")
+		h.ok(tree.selected(), "a tree entry is selected first")
+		feed("gg")
+		h.eq(nil, tree.selected(), "the heading is not a tree entry")
+		local notices = {}
+		local real_notify = vim.notify
+		vim.notify = function(message)
+			notices[#notices + 1] = message
+		end
+		local ok, err = pcall(function()
+			feed("pr")
+			h.eq(true, tree.is_tree_mode(), "invalid actions leave the tree open")
+			h.eq(2, #notices)
+			h.ok(notices[1]:find("Select a valid tree entry to preview", 1, true))
+			h.ok(notices[2]:find("Select a user prompt to fork", 1, true))
+		end)
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
+	end,
+
 	["p previews the selected entry and q returns to the tree"] = function()
 		start_pim()
 		tree.open()
