@@ -215,11 +215,12 @@
 ---@field entry PimSessionEntry
 ---@field id string|nil
 ---@field line string
+---@field turn_entries PimSessionEntry[]|nil
 
 ---@class PimRenderedFold
 ---@field first integer
 ---@field last integer
----@field kind "tool_calls"|"tool_results"|"thinking"|"bash_output"
+---@field kind "tool_calls"|"tool_results"|"thinking"|"bash_output"|"tree_responses"
 ---@field id string|nil
 
 ---@class PimRenderedHeader

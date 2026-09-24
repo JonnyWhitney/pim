@@ -43,11 +43,11 @@ function M.first_text(value)
 end
 
 ---@param text any
----@param width integer
+---@param width integer|nil
 ---@return string
 function M.one_line(text, width)
 	text = type(text) == "string" and vim.trim(text:gsub("%s+", " ")) or ""
-	if vim.fn.strchars(text) > width then
+	if width and vim.fn.strchars(text) > width then
 		return vim.fn.strcharpart(text, 0, width - 1) .. "…"
 	end
 	return text

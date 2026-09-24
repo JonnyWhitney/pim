@@ -79,12 +79,15 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
     selected session history into the transcript.
 
 :PiTree                                                                *:PiTree*
-    Browse the active session tree. pim disables prompts while the tree is
-    open.
+    Browse the active session tree as plain text. pim disables prompts while
+    the tree is open.
 
     Use j and k to move. p previews the selected entry. q returns from a
     preview to the tree. r forks a selected user prompt. c clones the active
-    branch. In the tree, <CR> or q restores the active transcript.
+    branch. Pi responses are folded by default. Use za to expand a group.
+    Tool calls and results are listed inside it by tool name, such as
+    pi: [tool call - read] and pi: [result - read]. In the tree, <CR> or q
+    restores the active transcript.
     Entries are shown as a flat list. Branch-summary and compaction entries
     are hidden, but their visible descendants remain in the list. Summary
     content is omitted from previews and transcripts. Saved sessions and

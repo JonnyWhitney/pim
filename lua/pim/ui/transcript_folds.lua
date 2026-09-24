@@ -111,7 +111,7 @@ function M.apply(buf, blocks, dirty)
 					vim.cmd(("%d,%dfold"):format(fold.first, fold.last))
 					local closed = state.choices[fold.key] and state.choices[fold.key][fold.id]
 					if closed == nil then
-						closed = defaults[fold.kind] ~= "open"
+						closed = fold.kind == "tree_responses" or defaults[fold.kind] ~= "open"
 					end
 					if not closed then
 						vim.cmd(("%dfoldopen"):format(fold.first))

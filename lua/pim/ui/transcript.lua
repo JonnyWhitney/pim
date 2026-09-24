@@ -198,6 +198,9 @@ end
 
 function M.foldtext()
 	local header = vim.fn.getline(vim.v.foldstart)
+	if require("pim.ui.tree").is_tree_mode() then
+		return header
+	end
 	local count = vim.v.foldend - vim.v.foldstart + 1
 	return ("%s  (%d lines)"):format(header, count)
 end
