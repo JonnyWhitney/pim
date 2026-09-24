@@ -82,12 +82,10 @@ function M.flatten(tree, leaf_id)
 		return entry.type == "message" and type(entry.message) == "table" and entry.message.role == "assistant"
 	end
 
-	local function visit(nodes, prefix, nested)
+	local function visit(nodes)
 		nodes = visible_nodes(nodes)
-		for index, node in ipairs(nodes) do
+		for _, node in ipairs(nodes) do
 			local entry = node.entry
-			local last = index == #nodes
-			local branch = nested and (last and "└─ " or "├─ ") or ""
 			local label = type(node.label) == "string" and node.label ~= "" and (" [" .. node.label .. "]") or ""
 			local marker = entry.id == leaf_id and "● " or "  "
 			local tail = node
@@ -115,17 +113,13 @@ function M.flatten(tree, leaf_id)
 			rows[#rows + 1] = {
 				entry = tail.entry,
 				id = tail.entry.id,
-				line = marker .. prefix .. branch .. summary .. label,
+				line = marker .. summary .. label,
 			}
-			local child_prefix = prefix
-			if nested then
-				child_prefix = child_prefix .. (last and "   " or "│  ")
-			end
-			visit(tail.children, child_prefix, true)
+			visit(tail.children)
 		end
 	end
 
-	visit(tree, "", false)
+	visit(tree)
 	return rows
 end
 

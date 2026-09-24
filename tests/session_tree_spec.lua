@@ -25,7 +25,7 @@ return {
 		local original = vim.deepcopy(data)
 		local rows = tree.flatten(data, "hidden-leaf")
 		h.eq(
-			{ "  You: root", "  ├─ You: a", "  ├─ You: b", "  │  └─ You: nested", "  └─ You: c" },
+			{ "  You: root", "  You: a", "  You: b", "  You: nested", "  You: c" },
 			vim.tbl_map(function(row)
 				return row.line
 			end, rows)
@@ -65,7 +65,7 @@ return {
 		}
 		local rows = tree.flatten(data, "reply")
 		h.eq(
-			{ "  pi: Running", "● ├─ pi: Done", "  └─ pi: Other" },
+			{ "  pi: Running", "● pi: Done", "  pi: Other" },
 			vim.tbl_map(function(row)
 				return row.line
 			end, rows)
@@ -121,7 +121,7 @@ return {
 			end, rows)
 		)
 		h.eq(
-			{ "  You: Start", "● └─ pi: [response] x 3", "     └─ You: Continue" },
+			{ "  You: Start", "● pi: [response] x 3", "  You: Continue" },
 			vim.tbl_map(function(row)
 				return row.line
 			end, rows)
@@ -149,14 +149,14 @@ return {
 			"branch-b"
 		)
 		h.eq(
-			{ "  pi: first x 2", "  ├─ pi: branch-a", "● └─ pi: branch-b" },
+			{ "  pi: first x 2", "  pi: branch-a", "● pi: branch-b" },
 			vim.tbl_map(function(row)
 				return row.line
 			end, rows)
 		)
 		local labeled = tree.flatten({ assistant("first", { assistant("second", nil, "saved") }) }, "second")
 		h.eq(
-			{ "  pi: first", "● └─ pi: second [saved]" },
+			{ "  pi: first", "● pi: second [saved]" },
 			vim.tbl_map(function(row)
 				return row.line
 			end, labeled)
@@ -199,8 +199,8 @@ return {
 			end, rows)
 		)
 		h.eq("  You: Start work", rows[1].line)
-		h.eq("  ├─ pi: First answer [first]", rows[2].line)
-		h.eq("● └─ pi: Second answer", rows[3].line)
+		h.eq("  pi: First answer [first]", rows[2].line)
+		h.eq("● pi: Second answer", rows[3].line)
 	end,
 
 	["preview messages follow only the selected branch"] = function()

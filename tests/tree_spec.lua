@@ -90,14 +90,15 @@ return {
 			error(err, 0)
 		end
 	end,
-	["tree renders session branches and locks the input"] = function()
+	["tree renders flat entries and locks the input"] = function()
 		start_pim()
 		tree.open()
 		h.wait_until(tree.is_open, "the tree to open", 5000)
 
 		local rendered = transcript_text()
 		h.ok(rendered:find("# pi tree", 1, true), "tree heading renders")
-		h.ok(rendered:find("Fix the parser error [parser work]", 1, true), "labels render")
+		h.ok(rendered:find("  You: Fix the parser error [parser work]", 1, true), "labels render without indentation")
+		h.ok(not rendered:find("└─", 1, true) and not rendered:find("├─", 1, true), "branches are not drawn")
 		h.ok(rendered:find("●", 1, true), "active leaf is marked")
 		h.eq(false, vim.bo[assert(layout.input_buf())].modifiable)
 		h.eq(assert(layout.transcript_win()), vim.api.nvim_get_current_win(), "tree receives focus")

@@ -105,9 +105,10 @@ when history is reloaded or a buffer or window is recreated.
 prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
 fork a selected user prompt, and `c` to clone the active branch. In a preview,
 `q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
-Branch-summary and compaction entries are hidden. Their visible descendants
-are shown under the nearest visible ancestor. Summary content is omitted from
-previews and transcripts. Saved sessions and internal tree links are preserved.
+Entries are shown as a flat list. Branch-summary and compaction entries are
+hidden, but their visible descendants remain in the list. Summary content is
+omitted from previews and transcripts. Saved sessions and internal tree links
+are preserved.
 
 pim blocks new, switch, fork, and clone session actions while Pi is streaming,
 compacting, running Bash, or retrying. An agent run remains busy until Pi sends
