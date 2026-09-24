@@ -43,6 +43,55 @@ return {
 		h.eq(original, data)
 		h.eq({}, tree.flatten({ node("compaction", "one", { node("branch_summary", "two") }) }, "two"))
 	end,
+	["tool results are hidden while their descendants remain selectable"] = function()
+		local result = {
+			entry = { type = "message", id = "result", message = { role = "toolResult", toolName = "bash" } },
+			children = {
+				{
+					entry = { type = "message", id = "reply", message = { role = "assistant", content = "Done" } },
+				},
+			},
+		}
+		local data = {
+			{
+				entry = { type = "message", id = "call", message = { role = "assistant", content = "Running" } },
+				children = {
+					result,
+					{
+						entry = { type = "message", id = "other", message = { role = "assistant", content = "Other" } },
+					},
+				},
+			},
+		}
+		local rows = tree.flatten(data, "reply")
+		h.eq(
+			{ "  pi: Running", "● ├─ pi: Done", "  └─ pi: Other" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		h.eq(
+			{ "call", "result", "reply" },
+			vim.tbl_map(function(entry)
+				return entry.id
+			end, assert(tree.path(data, "reply")))
+		)
+		h.eq(
+			{ "assistant", "toolResult", "assistant" },
+			vim.tbl_map(function(message)
+				return message.role
+			end, assert(tree.preview_messages(data, "reply")))
+		)
+		h.eq(
+			{},
+			tree.flatten(
+				{ {
+					entry = { type = "message", id = "result", message = { role = "toolResult" } },
+				} },
+				"result"
+			)
+		)
+	end,
 	["flatten renders branch order, labels, and the active leaf"] = function()
 		local rows = tree.flatten({
 			{

@@ -59,7 +59,15 @@ function M.flatten(tree, leaf_id)
 		for _, node in ipairs(nodes or {}) do
 			local entry = node.entry
 			if type(entry) == "table" then
-				if entry.type == "branch_summary" or entry.type == "compaction" then
+				if
+					entry.type == "branch_summary"
+					or entry.type == "compaction"
+					or (
+						entry.type == "message"
+						and type(entry.message) == "table"
+						and entry.message.role == "toolResult"
+					)
+				then
 					vim.list_extend(visible, visible_nodes(node.children))
 				else
 					visible[#visible + 1] = node
