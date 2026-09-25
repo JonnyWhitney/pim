@@ -69,6 +69,91 @@ return {
 		end
 	end,
 
+	["pi responses are folded by default and can be inspected individually"] = function()
+		layout.open()
+		local real_get_tree = client.get_tree
+		local ok, err = pcall(function()
+			local function message(id, role, content, children)
+				return {
+					entry = {
+						type = "message",
+						id = id,
+						message = { role = role, content = { { type = "text", text = content } } },
+					},
+					children = children,
+				}
+			end
+			local nodes = {
+				message("prompt", "user", "Start ``` fenced ``` text", {
+					message("first", "assistant", "First answer", {
+						message("result", "toolResult", "Output", {
+							message("second", "assistant", "Second answer", {
+								message("followup", "user", "Continue"),
+							}),
+						}),
+					}),
+				}),
+			}
+			nodes[1].children[1].entry.message.content = {
+				{ type = "thinking", thinking = "Look at the file" },
+				{ type = "toolCall", id = "call-1", name = "read", arguments = { path = "a.lua" } },
+			}
+			nodes[1].children[1].children[1].entry.message.toolName = "read"
+			---@diagnostic disable-next-line: duplicate-set-field
+			client.get_tree = function(callback)
+				callback(true, { tree = nodes, leafId = "followup" })
+			end
+			tree.open()
+			h.eq("text", vim.bo[assert(layout.transcript_buf())].filetype, "tree text is not parsed as Markdown")
+			local win = assert(layout.transcript_win())
+			local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
+			local group_line
+			for line, text in ipairs(lines) do
+				if text == "  pi: [response] x 2" then
+					group_line = line
+				end
+			end
+			h.ok(group_line, "response group is rendered")
+			h.ok(transcript_text():find("Start ``` fenced ``` text", 1, true), "backticks remain literal")
+			h.eq("    pi: [thinking]", lines[group_line + 1])
+			h.eq("    pi: [tool call - read]", lines[group_line + 2])
+			h.eq("    pi: [result - read]", lines[group_line + 3])
+			h.eq("    pi: Second answer", lines[group_line + 4])
+			h.eq(
+				group_line,
+				vim.api.nvim_win_call(win, function()
+					return vim.fn.foldclosed(group_line + 1)
+				end),
+				"responses are closed by default"
+			)
+			feed("j")
+			h.eq("second", tree.selected().id, "the group selects the last response")
+			feed("j")
+			h.eq("followup", tree.selected().id, "closed responses are skipped")
+			feed("k")
+			feed("zo")
+			feed("j")
+			h.eq("first", tree.selected().id, "an expanded response can be selected")
+			feed("j")
+			h.eq("first", tree.selected().id, "both blocks belong to the same response")
+			feed("j")
+			h.eq("result", tree.selected().id, "the tool result can be selected")
+			feed("k")
+			tree.preview()
+			h.eq("markdown", vim.bo[assert(layout.transcript_buf())].filetype, "previews use Markdown")
+			h.ok(transcript_text():find("read", 1, true), "the selected tool call can be previewed")
+			tree.return_to_tree()
+			h.eq("text", vim.bo[assert(layout.transcript_buf())].filetype, "tree text is restored")
+			h.eq("first", tree.selected().id, "the expanded selection survives preview")
+			tree.reset()
+			h.eq("markdown", vim.bo[assert(layout.transcript_buf())].filetype, "transcript syntax is restored")
+		end)
+		client.get_tree = real_get_tree
+		if not ok then
+			tree.reset()
+			error(err, 0)
+		end
+	end,
 	["compaction blocks tree opening and session changes"] = function()
 		local real_notify = vim.notify
 		local notices = {}
@@ -90,15 +175,29 @@ return {
 			error(err, 0)
 		end
 	end,
-	["tree renders session branches and locks the input"] = function()
+	["tree renders flat entries and locks the input"] = function()
 		start_pim()
 		tree.open()
 		h.wait_until(tree.is_open, "the tree to open", 5000)
 
 		local rendered = transcript_text()
 		h.ok(rendered:find("# pi tree", 1, true), "tree heading renders")
-		h.ok(rendered:find("Fix the parser error [parser work]", 1, true), "labels render")
+		h.ok(rendered:find("  You: Fix the parser error [parser work]", 1, true), "labels render without indentation")
+		h.ok(not rendered:find("└─", 1, true) and not rendered:find("├─", 1, true), "branches are not drawn")
 		h.ok(rendered:find("●", 1, true), "active leaf is marked")
+		local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
+		for line, text in ipairs(lines) do
+			if text == "  pi: [response]" then
+				h.eq(
+					line,
+					vim.api.nvim_win_call(assert(layout.transcript_win()), function()
+						return vim.fn.foldclosed(line + 1)
+					end),
+					"a single pi response is folded"
+				)
+				break
+			end
+		end
 		h.eq(false, vim.bo[assert(layout.input_buf())].modifiable)
 		h.eq(assert(layout.transcript_win()), vim.api.nvim_get_current_win(), "tree receives focus")
 
@@ -115,6 +214,48 @@ return {
 			vim.api.nvim_win_get_cursor(assert(layout.transcript_win()))[1],
 			"k moves to the previous entry"
 		)
+	end,
+
+	["G then k uses normal buffer navigation"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		local win = assert(layout.transcript_win())
+		feed("G")
+		local last_line = vim.api.nvim_win_get_cursor(win)[1]
+		h.eq(vim.api.nvim_buf_line_count(assert(layout.transcript_buf())), last_line)
+		feed("k")
+		h.ok(vim.api.nvim_win_get_cursor(win)[1] < last_line, "k moves up past closed folds")
+		feed("j")
+		h.eq(last_line, vim.api.nvim_win_get_cursor(win)[1], "j returns to the last line")
+	end,
+
+	["p and r require the cursor to be on a tree entry"] = function()
+		start_pim()
+		tree.open()
+		h.wait_until(tree.is_open, "the tree to open", 5000)
+
+		feed("j")
+		h.ok(tree.selected(), "a tree entry is selected first")
+		feed("gg")
+		h.eq(nil, tree.selected(), "the heading is not a tree entry")
+		local notices = {}
+		local real_notify = vim.notify
+		vim.notify = function(message)
+			notices[#notices + 1] = message
+		end
+		local ok, err = pcall(function()
+			feed("pr")
+			h.eq(true, tree.is_tree_mode(), "invalid actions leave the tree open")
+			h.eq(2, #notices)
+			h.ok(notices[1]:find("Select a valid tree entry to preview", 1, true))
+			h.ok(notices[2]:find("Select a user prompt to fork", 1, true))
+		end)
+		vim.notify = real_notify
+		if not ok then
+			error(err, 0)
+		end
 	end,
 
 	["p previews the selected entry and q returns to the tree"] = function()
@@ -247,6 +388,7 @@ return {
 		h.wait_until(function()
 			return not tree.is_open() and vim.bo[assert(layout.input_buf())].modifiable
 		end, "the tree to close", 5000)
+		h.eq("markdown", vim.bo[assert(layout.transcript_buf())].filetype, "closing restores Markdown")
 	end,
 
 	["enter closes the tree"] = function()

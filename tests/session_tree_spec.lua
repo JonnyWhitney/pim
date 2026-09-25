@@ -25,7 +25,7 @@ return {
 		local original = vim.deepcopy(data)
 		local rows = tree.flatten(data, "hidden-leaf")
 		h.eq(
-			{ "  You: root", "  ├─ You: a", "  ├─ You: b", "  │  └─ You: nested", "  └─ You: c" },
+			{ "  You: root", "  You: a", "  You: b", "  You: nested", "  You: c" },
 			vim.tbl_map(function(row)
 				return row.line
 			end, rows)
@@ -42,6 +42,131 @@ return {
 		)
 		h.eq(original, data)
 		h.eq({}, tree.flatten({ node("compaction", "one", { node("branch_summary", "two") }) }, "two"))
+	end,
+	["tool results remain visible and selectable between responses"] = function()
+		local result = {
+			entry = { type = "message", id = "result", message = { role = "toolResult", toolName = "bash" } },
+			children = {
+				{
+					entry = { type = "message", id = "reply", message = { role = "assistant", content = "Done" } },
+				},
+			},
+		}
+		local data = {
+			{
+				entry = { type = "message", id = "call", message = { role = "assistant", content = "Running" } },
+				children = {
+					result,
+					{
+						entry = { type = "message", id = "other", message = { role = "assistant", content = "Other" } },
+					},
+				},
+			},
+		}
+		local rows = tree.flatten(data, "reply")
+		h.eq(
+			{ "  pi: [response]", "  pi: [result - bash]", "● pi: [response]", "  pi: [response]" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		h.eq(
+			{ "call", "result", "reply" },
+			vim.tbl_map(function(entry)
+				return entry.id
+			end, assert(tree.path(data, "reply")))
+		)
+		h.eq(
+			{ "assistant", "toolResult", "assistant" },
+			vim.tbl_map(function(message)
+				return message.role
+			end, assert(tree.preview_messages(data, "reply")))
+		)
+		h.eq(
+			"● pi: [result]",
+			tree.flatten(
+				{ {
+					entry = { type = "message", id = "result", message = { role = "toolResult" } },
+				} },
+				"result"
+			)[1].line
+		)
+	end,
+	["consecutive pi responses share one row without changing preview paths"] = function()
+		local function message(id, role, text, children)
+			return {
+				entry = { type = "message", id = id, message = { role = role, content = text } },
+				children = children,
+			}
+		end
+		local data = {
+			message("prompt", "user", "Start", {
+				message("first", "assistant", "[response]", {
+					message("result", "toolResult", "output", {
+						message("second", "assistant", "[response]", {
+							message("third", "assistant", "[response]", {
+								message("followup", "user", "Continue"),
+							}),
+						}),
+					}),
+				}),
+			}),
+		}
+		local original = vim.deepcopy(data)
+		local rows = tree.flatten(data, "third")
+		h.eq(
+			{ "first", "result", "second", "third" },
+			vim.tbl_map(function(entry)
+				return entry.id
+			end, rows[2].turn_entries)
+		)
+		h.eq(
+			{ "prompt", "third", "followup" },
+			vim.tbl_map(function(row)
+				return row.id
+			end, rows)
+		)
+		h.eq(
+			{ "  You: Start", "● pi: [response] x 3", "  You: Continue" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		h.eq(
+			{ "user", "assistant", "toolResult", "assistant", "assistant" },
+			vim.tbl_map(function(message)
+				return message.role
+			end, assert(tree.preview_messages(data, rows[2].id)))
+		)
+		h.eq(original, data)
+	end,
+	["pi response groups stop at branches and labels"] = function()
+		local function assistant(id, children, label)
+			return {
+				entry = { type = "message", id = id, message = { role = "assistant", content = id } },
+				children = children,
+				label = label,
+			}
+		end
+		local rows = tree.flatten(
+			{ assistant("first", {
+				assistant("second", { assistant("branch-a"), assistant("branch-b") }),
+			}) },
+			"branch-b"
+		)
+		h.eq(
+			{ "  pi: [response] x 2", "  pi: [response]", "● pi: [response]" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, rows)
+		)
+		local labeled = tree.flatten({ assistant("first", { assistant("second", nil, "saved") }) }, "second")
+		h.eq(
+			{ "  pi: [response]", "● pi: [response] [saved]" },
+			vim.tbl_map(function(row)
+				return row.line
+			end, labeled)
+		)
 	end,
 	["flatten renders branch order, labels, and the active leaf"] = function()
 		local rows = tree.flatten({
@@ -80,8 +205,14 @@ return {
 			end, rows)
 		)
 		h.eq("  You: Start work", rows[1].line)
-		h.eq("  ├─ pi: First answer [first]", rows[2].line)
-		h.eq("● └─ pi: Second answer", rows[3].line)
+		h.eq("  pi: [response] [first]", rows[2].line)
+		h.eq("● pi: [response]", rows[3].line)
+		h.eq(
+			{ "First answer" },
+			vim.tbl_map(function(entry)
+				return entry.message.content[1].text
+			end, rows[2].turn_entries)
+		)
 	end,
 
 	["preview messages follow only the selected branch"] = function()
@@ -135,12 +266,104 @@ return {
 		h.eq(nil, tree.preview_messages(data, "missing"))
 	end,
 
+	["tree previews keep complete text on one line"] = function()
+		local text = string.rep("a", 200) .. "\n  " .. string.rep("b", 200)
+		local summary = tree.summary({ type = "message", message = { role = "user", content = text } })
+		h.eq("You: " .. string.rep("a", 200) .. " " .. string.rep("b", 200), summary)
+		h.eq(
+			"! " .. string.rep("a", 200) .. " " .. string.rep("b", 200),
+			tree.summary({
+				type = "message",
+				message = { role = "bashExecution", command = text },
+			})
+		)
+	end,
 	["summaries identify session entry types"] = function()
 		h.eq(
 			"You: an empty prompt",
 			tree.summary({ type = "message", message = { role = "user", content = "an empty prompt" } })
 		)
-		h.eq("result: bash", tree.summary({ type = "message", message = { role = "toolResult", toolName = "bash" } }))
+		h.eq(
+			"pi: [result - bash]",
+			tree.summary({ type = "message", message = { role = "toolResult", toolName = "bash" } })
+		)
+		h.eq(
+			"pi: [tool call - bash]",
+			tree.summary({
+				type = "message",
+				message = {
+					role = "assistant",
+					content = { { type = "thinking", thinking = "Plan" }, { type = "toolCall", name = "bash" } },
+				},
+			})
+		)
+		h.eq(
+			"pi: [tool call - read, bash]",
+			tree.summary({
+				type = "message",
+				message = {
+					role = "assistant",
+					content = { { type = "toolCall", name = "read" }, { type = "toolCall", name = "bash" } },
+				},
+			})
+		)
+		h.eq(
+			"pi: [tool call - tool]",
+			tree.summary({
+				type = "message",
+				message = {
+					role = "assistant",
+					content = { { type = "toolCall" } },
+				},
+			})
+		)
+		h.eq(
+			"pi: [thinking]",
+			tree.summary({
+				type = "message",
+				message = {
+					role = "assistant",
+					content = { { type = "thinking", thinking = "Plan" } },
+				},
+			})
+		)
+		h.eq("pi: [response]", tree.summary({ type = "message", message = { role = "assistant", content = {} } }))
+		h.eq(
+			"pi: Done",
+			tree.summary({
+				type = "message",
+				message = {
+					role = "assistant",
+					content = { { type = "toolCall", name = "bash" }, { type = "text", text = "Done" } },
+				},
+			})
+		)
+		h.eq(
+			{ "pi: [thinking]", "pi: Searching files", "pi: [tool call - read]", "pi: [tool call - bash]" },
+			tree.detail_lines({
+				type = "message",
+				message = {
+					role = "assistant",
+					content = {
+						{ type = "thinking", thinking = "Plan" },
+						{ type = "text", text = "Searching\nfiles" },
+						{ type = "toolCall", name = "read" },
+						{ type = "toolCall", name = "bash" },
+					},
+				},
+			})
+		)
+		h.eq(
+			{ "pi: [response]" },
+			tree.detail_lines({ type = "message", message = { role = "assistant", content = {} } })
+		)
+		h.eq(
+			{ "pi: [result - read]" },
+			tree.detail_lines({ type = "message", message = {
+				role = "toolResult",
+				toolName = "read",
+			} })
+		)
 		h.eq(
 			"! git status",
 			tree.summary({ type = "message", message = { role = "bashExecution", command = "git status" } })

@@ -101,13 +101,19 @@ when history is reloaded or a buffer or window is recreated.
 
 ### Tree explorer
 
-`:PiTree` replaces the transcript with the active session tree and disables
-prompts. Use `j` and `k` to select an entry. Use `p` to preview it, `r` to
-fork a selected user prompt, and `c` to clone the active branch. In a preview,
-`q` returns to the tree. In the tree, `<CR>` or `q` restores the transcript.
-Branch-summary and compaction entries are hidden. Their visible descendants
-are shown under the nearest visible ancestor. Summary content is omitted from
-previews and transcripts. Saved sessions and internal tree links are preserved.
+`:PiTree` replaces the transcript with a plain-text session tree and disables
+prompts. Navigate with normal buffer motions, including `j`, `k`, `gg`, and
+`G`. Use `p` to preview an entry and `r` to fork a selected user prompt.
+Both require the cursor to be on an entry. Use `c` to clone the active branch.
+Pi responses are folded by default. Use `za` to expand a group. Tool calls and results are
+listed inside it by tool name, such as `pi: [tool call - read]` and
+`pi: [result - read]`.
+In a preview, `q` returns to the tree. In the tree, `<CR>` or `q` restores the
+transcript.
+Entries are shown as a flat list. Branch-summary and compaction entries are
+hidden, but their visible descendants remain in the list. Summary content is
+omitted from previews and transcripts. Saved sessions and internal tree links
+are preserved.
 
 pim blocks new, switch, fork, and clone session actions while Pi is streaming,
 compacting, running Bash, or retrying. An agent run remains busy until Pi sends
