@@ -50,10 +50,6 @@ end
 local TRANSCRIPT_WIN_OPTS = {
 	wrap = true,
 	linebreak = true,
-	number = false,
-	relativenumber = false,
-	signcolumn = "no",
-	foldcolumn = "0",
 	foldmethod = "manual",
 	foldenable = true,
 	foldtext = "v:lua.require'pim.ui.transcript'.foldtext()",
@@ -63,18 +59,54 @@ local TRANSCRIPT_WIN_OPTS = {
 local INPUT_WIN_OPTS = {
 	wrap = true,
 	linebreak = true,
-	number = false,
-	relativenumber = false,
-	signcolumn = "no",
-	foldcolumn = "0",
 	winfixheight = true,
 }
 
 local function set_win_opts(win, opts)
 	for name, value in pairs(opts) do
-		vim.api.nvim_set_option_value(name, value, { win = win })
+		vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
 	end
 end
+
+local function reset_win_opts(win)
+	local restored = {}
+	for _, opts in ipairs({ TRANSCRIPT_WIN_OPTS, INPUT_WIN_OPTS }) do
+		for name in pairs(opts) do
+			if not restored[name] then
+				vim.api.nvim_set_option_value(
+					name,
+					vim.api.nvim_get_option_value(name, { scope = "global" }),
+					{ win = win, scope = "local" }
+				)
+				restored[name] = true
+			end
+		end
+	end
+end
+
+-- New windows copy local options from the window being split, including pim's folds.
+-- Restore the user's global values before the new window becomes ordinary UI.
+local left_pim_win = nil
+vim.api.nvim_create_autocmd("WinLeave", {
+	callback = function()
+		local win = vim.api.nvim_get_current_win()
+		left_pim_win = wins ~= nil and (win == wins.transcript or win == wins.input) and win or nil
+	end,
+})
+vim.api.nvim_create_autocmd("WinNew", {
+	callback = function()
+		if not left_pim_win then
+			return
+		end
+		left_pim_win = nil
+		reset_win_opts(vim.api.nvim_get_current_win())
+	end,
+})
+vim.api.nvim_create_autocmd("WinEnter", {
+	callback = function()
+		left_pim_win = nil
+	end,
+})
 
 local function input_min_height()
 	return require("pim.config").get().input.min_height
@@ -192,6 +224,7 @@ local function close_window(win)
 	-- Neovim must keep one window. Remove pim from that window instead.
 	local placeholder = vim.api.nvim_create_buf(true, false)
 	vim.api.nvim_win_set_buf(win, placeholder)
+	reset_win_opts(win)
 end
 
 function M.hide()
