@@ -105,11 +105,15 @@ return {
 
 		vim.cmd("tabnew")
 		vim.cmd("tabonly")
+		local foldtext = vim.api.nvim_get_option_value("foldtext", { scope = "global" })
+		local winfixheight = vim.api.nvim_get_option_value("winfixheight", { scope = "global" })
 		layout.open()
 		h.eq(true, layout.owns_only_ui(), "all remaining windows belong to pim")
 		layout.destroy()
 		h.eq(false, layout.owns_only_ui(), "a destroyed layout owns no UI")
 		h.eq(1, #vim.api.nvim_list_wins(), "test cleanup keeps Neovim alive")
+		h.eq(foldtext, vim.wo.foldtext, "the last window no longer has pim's foldtext")
+		h.eq(winfixheight, vim.wo.winfixheight, "the last window no longer has pim's fixed height")
 	end,
 
 	["a buffer whose name merely contains ours is left alone"] = function()
@@ -207,6 +211,55 @@ return {
 		end)
 	end,
 
+	["new windows do not inherit pim window options"] = function()
+		guarded(function()
+			local foldtext = vim.api.nvim_get_option_value("foldtext", { scope = "global" })
+			local linebreak = vim.api.nvim_get_option_value("linebreak", { scope = "global" })
+			local fillchars = vim.api.nvim_get_option_value("fillchars", { scope = "global" })
+			local winfixheight = vim.api.nvim_get_option_value("winfixheight", { scope = "global" })
+			layout.open()
+			local transcript = assert(layout.transcript_win())
+			local input = assert(layout.input_win())
+			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { scope = "global" }))
+			h.eq(linebreak, vim.api.nvim_get_option_value("linebreak", { scope = "global" }))
+			h.eq(fillchars, vim.api.nvim_get_option_value("fillchars", { scope = "global" }))
+			h.eq(winfixheight, vim.api.nvim_get_option_value("winfixheight", { scope = "global" }))
+
+			vim.api.nvim_set_current_win(transcript)
+			vim.cmd("split")
+			local ordinary = vim.api.nvim_get_current_win()
+			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { win = ordinary }))
+			h.eq(fillchars, vim.api.nvim_get_option_value("fillchars", { win = ordinary }))
+			h.eq(linebreak, vim.api.nvim_get_option_value("linebreak", { win = ordinary }))
+			h.eq(
+				"v:lua.require'pim.ui.transcript'.foldtext()",
+				vim.api.nvim_get_option_value("foldtext", { win = transcript })
+			)
+			vim.api.nvim_win_close(ordinary, true)
+
+			vim.api.nvim_set_current_win(transcript)
+			vim.cmd("wincmd n")
+			ordinary = vim.api.nvim_get_current_win()
+			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { win = ordinary }), "<C-w><C-n> is clean")
+			vim.api.nvim_win_close(ordinary, true)
+
+			vim.api.nvim_set_current_win(input)
+			vim.cmd("new")
+			ordinary = vim.api.nvim_get_current_win()
+			h.eq(winfixheight, vim.api.nvim_get_option_value("winfixheight", { win = ordinary }))
+			h.eq(linebreak, vim.api.nvim_get_option_value("linebreak", { win = ordinary }))
+			h.eq(true, vim.api.nvim_get_option_value("winfixheight", { win = input }))
+			vim.api.nvim_win_close(ordinary, true)
+
+			vim.api.nvim_set_current_win(transcript)
+			vim.cmd("tabnew")
+			ordinary = vim.api.nvim_get_current_win()
+			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { win = ordinary }))
+			h.eq(fillchars, vim.api.nvim_get_option_value("fillchars", { win = ordinary }))
+			vim.cmd("tabclose")
+		end)
+	end,
+
 	["a repaired transcript window keeps its window options"] = function()
 		local WANTED = {
 			wrap = true,
@@ -215,8 +268,6 @@ return {
 			foldmethod = "manual",
 			foldtext = "v:lua.require'pim.ui.transcript'.foldtext()",
 			fillchars = "fold: ",
-			number = false,
-			signcolumn = "no",
 		}
 		local WRONG = {
 			wrap = false,
@@ -225,8 +276,6 @@ return {
 			foldmethod = "indent",
 			foldtext = "",
 			fillchars = "",
-			number = true,
-			signcolumn = "yes",
 		}
 
 		guarded(function()
@@ -238,7 +287,7 @@ return {
 
 			vim.api.nvim_buf_delete(assert(layout.transcript_buf()), { force = true })
 			for name, value in pairs(WRONG) do
-				vim.api.nvim_set_option_value(name, value, { win = input_win })
+				vim.api.nvim_set_option_value(name, value, { win = input_win, scope = "local" })
 			end
 
 			layout.open()
