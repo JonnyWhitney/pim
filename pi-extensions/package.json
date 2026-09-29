@@ -11,8 +11,8 @@
 		"fmt:check": "node scripts/check-node.mjs && oxfmt --check subagents tests scripts package.json tsconfig.json .oxlintrc.json .oxfmtrc.json pnpm-workspace.yaml"
 	},
 	"devDependencies": {
-		"@earendil-works/pi-ai": "0.85.1",
-		"@earendil-works/pi-coding-agent": "0.85.1",
+		"@earendil-works/pi-ai": "0.99.0",
+		"@earendil-works/pi-coding-agent": "0.99.0",
 		"@types/node": "24.13.5",
 		"@typescript/native-preview": "7.0.0-dev.20260707.2",
 		"oxfmt": "0.68.0",

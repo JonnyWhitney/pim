@@ -29,7 +29,7 @@ function M.check()
 	end
 
 	local config = require("pim.config").get()
-	local MINIMUM_PI_VERSION = { 0, 85, 1 }
+	local MINIMUM_PI_VERSION = { 0, 99, 0 }
 	local MINIMUM_PI_VERSION_TEXT = table.concat(MINIMUM_PI_VERSION, ".")
 	local command = type(config.pi_cmd) == "table" and vim.deepcopy(config.pi_cmd) or { config.pi_cmd }
 	local executable = command[1]

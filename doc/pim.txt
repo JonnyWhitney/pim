@@ -36,8 +36,8 @@ hidden. Folds can be toggled with <Tab> or native Neovim fold commands.
 Manual choices are preserved per window during updates. Defaults are reapplied
 when history is reloaded or a buffer or window is recreated.
 
-Neovim nightly and Pi 0.85.1 or newer are required. The backend is tested
-against Pi 0.85.1. Subagents are enabled by default.
+Neovim nightly and Pi 0.99.0 or newer are required. The backend is tested
+against Pi 0.99.0. Subagents are enabled by default.
 The Neovim client is written in Lua without plugin dependencies.
 A bundled TypeScript backend is executed by Pi. No user build step is required.
 Other Neovim releases are not supported.
@@ -139,7 +139,7 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 
 :PiThinking                                                      *:PiThinking*
     Select a thinking level that the current model supports. pim gets this
-    list from pi. Older pi versions use a compatible fallback list.
+    list from pi. A fallback list is used if the levels cannot be retrieved.
 
 :PiAgents[!]                                                        *:PiAgents*
     Select and open a subagent invocation from the current parent session.
@@ -569,7 +569,7 @@ Node.js 24.21.0 (the latest LTS release) and pnpm 12.4.2 are pinned in
 pi-extensions/mise.toml. These tool versions are scoped to pi-extensions/.
 Node.js 24.21.0 or a newer 24.x release is required for backend development.
 Other Node.js majors are rejected by the backend development commands.
-Pi API development dependencies are pinned to 0.85.1.
+Pi API development dependencies are pinned to 0.99.0.
 
 Strict type checking is provided by tsgo from @typescript/native-preview.
 TypeScript 7.0.2 is included for editors. Linting is provided by Oxlint 1.83.0;
