@@ -4,7 +4,7 @@ local M = {}
 
 local PREVIEW_WIDTH = 72
 
--- Older pi versions do not provide this RPC method. These levels keep the picker usable.
+-- These fallback levels are used if pi's supported levels cannot be retrieved.
 local FALLBACK_THINKING_LEVELS = { "off", "minimal", "low", "medium", "high", "xhigh" }
 
 local function mark(is_current)

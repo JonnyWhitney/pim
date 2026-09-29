@@ -73,16 +73,17 @@ end
 ---@return string[]
 function M.detail_lines(entry)
 	local message = entry.message
+	local blocks = type(message) == "table" and message.content or nil
 	if
 		entry.type ~= "message"
 		or type(message) ~= "table"
 		or message.role ~= "assistant"
-		or type(message.content) ~= "table"
+		or type(blocks) ~= "table"
 	then
 		return { M.summary(entry) }
 	end
 	local lines = {}
-	for _, block in ipairs(message.content) do
+	for _, block in ipairs(blocks) do
 		if type(block) == "table" then
 			if block.type == "text" then
 				local text = content.one_line(block.text)

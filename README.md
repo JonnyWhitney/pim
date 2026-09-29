@@ -10,7 +10,7 @@ Treesitter, and the Pi RPC interface are supported.
 ## Requirements
 
 - Neovim nightly. Other Neovim releases are not supported.
-- Pi 0.85.1 or newer. The backend is tested against Pi 0.85.1.
+- Pi 0.99.0 or newer. The backend is tested against Pi 0.99.0.
   `pi` must be on `$PATH` or set through `pi_cmd`.
 
 ## Install
@@ -515,7 +515,7 @@ Node.js 24.21.0, the latest LTS release, and pnpm 12.4.2 are pinned through
 `pi-extensions/mise.toml`. Node.js 24.21.0 or a newer 24.x release is required
 for backend development. These tool versions are scoped to `pi-extensions/`.
 Other Node.js majors are rejected by the backend development commands.
-Pi API development dependencies remain pinned to 0.85.1.
+Pi API development dependencies are pinned to 0.99.0.
 
 The extension and its TypeScript tests are checked with `tsgo` from
 `@typescript/native-preview`. TypeScript 7.0.2 is included for editor support.
@@ -535,7 +535,7 @@ mise -C pi-extensions exec -- pnpm install --frozen-lockfile
 mise run verify                      # Run all Lua and backend checks.
 mise run test                        # Run the headless Lua test suite.
 mise run test bash                   # Run Lua tests with "bash" in the name.
-mise -C pi-extensions run test       # Run backend tests, including Pi 0.85.1 loading checks.
+mise -C pi-extensions run test       # Run backend tests, including Pi 0.99.0 loading checks.
 mise run check                       # Run :checkhealth pim in a clean instance.
 mise run fmt                         # Format Lua with Stylua and the backend with Oxfmt.
 mise run fmt:check                   # Check both formats without changing files.
