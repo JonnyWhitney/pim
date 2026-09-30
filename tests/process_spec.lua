@@ -2,28 +2,64 @@ local h = require("helpers")
 local process = require("pim.rpc.process")
 
 local function run(cmd, handlers)
-	local exited = false
-	local handle, err = process.spawn({
-		cmd = cmd,
-		on_line = handlers.on_line,
-		on_error = handlers.on_error,
-		on_overflow = handlers.on_overflow,
-		max_line_bytes = handlers.max_line_bytes,
-		on_exit = function()
-			exited = true
-		end,
-	})
-	h.ok(handle ~= nil, "spawn failed: " .. tostring(err))
-	h.ok(
-		vim.wait(5000, function()
+	return h.with_cleanup(function(defer)
+		local exited = false
+		local handle, err = process.spawn({
+			cmd = cmd,
+			env = handlers.env,
+			on_line = handlers.on_line,
+			on_error = handlers.on_error,
+			on_overflow = handlers.on_overflow,
+			max_line_bytes = handlers.max_line_bytes,
+			on_exit = function()
+				exited = true
+			end,
+		})
+		if handle then
+			defer(function()
+				h.wait_until(function()
+					return exited
+				end, "child exit after cleanup", 3000)
+			end)
+			defer(function()
+				handle.kill()
+			end)
+			defer(function()
+				handle.stop(200)
+			end)
+		end
+		h.ok(handle ~= nil, "spawn failed: " .. tostring(err))
+		h.wait_until(function()
 			return exited
-		end, 10),
-		"timed out waiting for the process to exit"
-	)
-	return handle
+		end, "the process to exit", 5000)
+		return handle
+	end)
 end
 
 return {
+	["process environment is merged without changing the editor environment"] = function()
+		h.with_cleanup(function(defer)
+			local original = vim.env.PIM_TEST_ENV
+			local path = vim.env.PATH
+			defer(function()
+				vim.env.PIM_TEST_ENV = original
+			end)
+			defer(function()
+				vim.env.PATH = path
+			end)
+			local output
+			run({ "sh", "-c", 'printf "%s\\n%s\\n" "$PIM_TEST_ENV" "$PATH"' }, {
+				env = { PIM_TEST_ENV = "private" },
+				on_line = function(line)
+					output = output or {}
+					output[#output + 1] = line
+				end,
+			})
+			h.eq({ "private", path }, output)
+			h.eq(original, vim.env.PIM_TEST_ENV)
+			h.eq(path, vim.env.PATH)
+		end)
+	end,
 	["spawning a missing binary reports an error instead of raising"] = function()
 		local handle, err = process.spawn({
 			cmd = { "pim-definitely-not-a-real-binary" },

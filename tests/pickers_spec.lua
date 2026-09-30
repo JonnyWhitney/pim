@@ -6,37 +6,34 @@ local state = require("pim.state")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
-local original_select = vim.ui.select
-
 local function start_fake()
 	config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua" } })
 	client.start({ on_event = require("pim.events").handle })
 end
 
 local function with_select(stub, fn)
-	vim.ui.select = stub
-	local ok, err = pcall(fn)
-	vim.ui.select = original_select
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		h.patch(defer, vim.ui, "select", stub)
+		return fn()
+	end)
 end
 
 local function with_trust_project(fn)
-	local root = vim.fn.tempname()
-	local project = root .. "/work/project"
-	local original_agent_dir = vim.env.PI_CODING_AGENT_DIR
-	local original_cwd = assert(vim.uv.cwd())
-	vim.fn.mkdir(project, "p")
-	vim.env.PI_CODING_AGENT_DIR = root .. "/agent"
-	assert(vim.uv.chdir(project))
-	local ok, err = pcall(fn, project, root .. "/work")
-	assert(vim.uv.chdir(original_cwd))
-	vim.env.PI_CODING_AGENT_DIR = original_agent_dir
-	vim.fn.delete(root, "rf")
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		local root = vim.fn.tempname()
+		local project = root .. "/work/project"
+		defer(function()
+			h.eq(0, vim.fn.delete(root, "rf"))
+		end)
+		vim.fn.mkdir(project, "p")
+		h.patch(defer, vim.env, "PI_CODING_AGENT_DIR", root .. "/agent")
+		local cwd = assert(vim.uv.cwd())
+		defer(function()
+			assert(vim.uv.chdir(cwd))
+		end)
+		assert(vim.uv.chdir(project))
+		return fn(project, root .. "/work")
+	end)
 end
 
 local function capture_notify(fn)
@@ -127,21 +124,21 @@ return {
 	end,
 
 	["fork picker normalizes and truncates prompt labels"] = function()
-		local original_messages = client.get_fork_messages
-		local prompt = "  Please inspect the session parser\nand update all related tests before running verification  "
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.get_fork_messages = function(callback)
-			callback(true, { messages = { { entryId = "entry-1", text = prompt } } })
-		end
+		h.with_cleanup(function(defer)
+			local prompt =
+				"  Please inspect the session parser\nand update all related tests before running verification  "
+			h.patch(defer, client, "get_fork_messages", function(callback)
+				callback(true, { messages = { { entryId = "entry-1", text = prompt } } })
+			end)
 
-		local label
-		with_select(function(items, opts, on_choice)
-			label = opts.format_item(items[1])
-			on_choice(nil)
-		end, pickers.fork)
-		client.get_fork_messages = original_messages
+			local label
+			with_select(function(items, opts, on_choice)
+				label = opts.format_item(items[1])
+				on_choice(nil)
+			end, pickers.fork)
 
-		h.eq("Please inspect the session parser and update all related tests before r…", label)
+			h.eq("Please inspect the session parser and update all related tests before r…", label)
+		end)
 	end,
 
 	["thinking picker sets the level and the event confirms it"] = function()
@@ -164,7 +161,6 @@ return {
 	end,
 
 	["thinking picker falls back to the built-in levels when pi cannot list them"] = function()
-		local original_levels = client.get_available_thinking_levels
 		local builtin = { "off", "minimal", "low", "medium", "high", "xhigh" }
 
 		for _, answer in ipairs({
@@ -172,20 +168,19 @@ return {
 			{ success = true, payload = nil },
 			{ success = true, payload = { levels = {} } },
 		}) do
-			---@diagnostic disable-next-line: duplicate-set-field
-			client.get_available_thinking_levels = function(callback)
-				callback(answer.success, answer.payload)
-			end
+			h.with_cleanup(function(defer)
+				h.patch(defer, client, "get_available_thinking_levels", function(callback)
+					callback(answer.success, answer.payload)
+				end)
 
-			local seen
-			with_select(function(items)
-				seen = items
-			end, pickers.thinking)
+				local seen
+				with_select(function(items)
+					seen = items
+				end, pickers.thinking)
 
-			h.eq(builtin, seen, "fallback list for " .. vim.inspect(answer):gsub("%s+", " "))
+				h.eq(builtin, seen, "fallback list for " .. vim.inspect(answer):gsub("%s+", " "))
+			end)
 		end
-
-		client.get_available_thinking_levels = original_levels
 	end,
 
 	["trust picker applies all three choices"] = function()
@@ -259,63 +254,60 @@ return {
 	["trust picker reports read, validation, and lock failures"] = function()
 		with_trust_project(function()
 			local trust = require("pim.trust")
-			local original_get_entry = trust.get_entry
 			for _, failure in ipairs({
 				"failed to read trust store",
 				"invalid trust store",
 				"failed to acquire trust store lock",
 			}) do
-				---@diagnostic disable-next-line: duplicate-set-field
-				trust.get_entry = function()
-					error(failure)
-				end
-				local shown = false
-				local messages = capture_notify(function()
-					with_select(function()
-						shown = true
-					end, pickers.trust)
+				h.with_cleanup(function(defer)
+					h.patch(defer, trust, "get_entry", function()
+						error(failure)
+					end)
+					local shown = false
+					local messages = capture_notify(function()
+						with_select(function()
+							shown = true
+						end, pickers.trust)
+					end)
+					h.eq(false, shown)
+					h.ok(messages[1].message:find("Cannot read project trust", 1, true))
+					h.ok(messages[1].message:find(failure, 1, true))
 				end)
-				h.eq(false, shown)
-				h.ok(messages[1].message:find("Cannot read project trust", 1, true))
-				h.ok(messages[1].message:find(failure, 1, true))
 			end
-			trust.get_entry = original_get_entry
 		end)
 	end,
 
 	["trust picker reports write failures"] = function()
 		with_trust_project(function()
 			local trust = require("pim.trust")
-			local original_trust = trust.trust
-			---@diagnostic disable-next-line: duplicate-set-field
-			trust.trust = function()
-				error("failed to write trust store")
-			end
-			local messages = capture_notify(function()
-				with_select(function(items, _, on_choice)
-					on_choice(items[1])
-				end, pickers.trust)
+			h.with_cleanup(function(defer)
+				h.patch(defer, trust, "trust", function()
+					error("failed to write trust store")
+				end)
+				local messages = capture_notify(function()
+					with_select(function(items, _, on_choice)
+						on_choice(items[1])
+					end, pickers.trust)
+				end)
+				h.ok(messages[1].message:find("Cannot update project trust", 1, true))
+				h.ok(messages[1].message:find("failed to write trust store", 1, true))
 			end)
-			trust.trust = original_trust
-			h.ok(messages[1].message:find("Cannot update project trust", 1, true))
-			h.ok(messages[1].message:find("failed to write trust store", 1, true))
 		end)
 	end,
 
 	["trust picker requests a restart when pi is running"] = function()
 		with_trust_project(function()
-			local original_running = client.is_running
-			---@diagnostic disable-next-line: duplicate-set-field
-			client.is_running = function()
-				return true
-			end
-			local messages = capture_notify(function()
-				with_select(function(items, _, on_choice)
-					on_choice(items[1])
-				end, pickers.trust)
+			h.with_cleanup(function(defer)
+				h.patch(defer, client, "is_running", function()
+					return true
+				end)
+				local messages = capture_notify(function()
+					with_select(function(items, _, on_choice)
+						on_choice(items[1])
+					end, pickers.trust)
+				end)
+				h.ok(messages[1].message:find(":PiRestart", 1, true), "restart instruction is shown")
 			end)
-			client.is_running = original_running
-			h.ok(messages[1].message:find(":PiRestart", 1, true), "restart instruction is shown")
 		end)
 	end,
 }

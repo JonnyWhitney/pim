@@ -25,18 +25,15 @@ end
 return {
 	["workflow listing delegates to session files"] = function()
 		local expected = { { id = "session-1" } }
-		local original = session_files.list
-		local calls = 0
-		---@diagnostic disable-next-line: duplicate-set-field
-		session_files.list = function()
-			calls = calls + 1
-			return expected
-		end
-		local actual = sessions.list()
-		session_files.list = original
-
-		h.eq(expected, actual)
-		h.eq(1, calls)
+		h.with_cleanup(function(defer)
+			local calls = 0
+			h.patch(defer, session_files, "list", function()
+				calls = calls + 1
+				return expected
+			end)
+			h.eq(expected, sessions.list())
+			h.eq(1, calls)
+		end)
 	end,
 
 	["old application session APIs are removed"] = function()
@@ -109,35 +106,33 @@ return {
 	end,
 
 	["end-to-end: picker switch cold-renders the target session"] = function()
-		local client = require("pim.rpc.client")
 		local config = require("pim.config")
 		local layout = require("pim.ui.layout")
 		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua" } })
 		require("pim").start()
 
-		local original_list = sessions.list
-		local original_select = vim.ui.select
-		---@diagnostic disable-next-line: duplicate-set-field
-		sessions.list = function()
-			return {
-				{ id = "switched-session", path = "/tmp/fake.jsonl", mtime = 0, message_count = 2, name = "old work" },
-			}
-		end
-		---@diagnostic disable-next-line: duplicate-set-field
-		vim.ui.select = function(items, _, on_choice)
-			on_choice(items[1])
-		end
+		h.with_cleanup(function(defer)
+			h.patch(defer, sessions, "list", function()
+				return {
+					{
+						id = "switched-session",
+						path = "/tmp/fake.jsonl",
+						mtime = 0,
+						message_count = 2,
+						name = "old work",
+					},
+				}
+			end)
+			h.patch(defer, vim.ui, "select", function(items, _, on_choice)
+				on_choice(items[1])
+			end)
 
-		require("pim.ui.pickers").session()
+			require("pim.ui.pickers").session()
 
-		local ok, err = pcall(h.wait_until, function()
-			local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
-			return table.concat(lines, "\n"):find("old answer", 1, true) ~= nil
-		end, "the switched session history to cold-render into the transcript", 10000)
-
-		sessions.list = original_list
-		vim.ui.select = original_select
-
-		h.ok(ok, tostring(err))
+			h.wait_until(function()
+				local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
+				return table.concat(lines, "\n"):find("old answer", 1, true) ~= nil
+			end, "the switched session history to cold-render into the transcript", 10000)
+		end)
 	end,
 }

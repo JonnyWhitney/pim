@@ -22,9 +22,9 @@ end
 
 local function user_buf(name)
 	local buf = vim.api.nvim_create_buf(true, false)
+	scratch[#scratch + 1] = buf
 	vim.api.nvim_buf_set_name(buf, name)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "unsaved work" })
-	scratch[#scratch + 1] = buf
 	return buf
 end
 
@@ -33,28 +33,45 @@ local function drop_pi_bufs()
 end
 
 local function guarded(fn)
-	scratch = {}
-	vim.cmd("tabnew")
-	vim.api.nvim_buf_set_lines(0, 0, -1, false, { "guard" })
-	local guard = vim.api.nvim_get_current_tabpage()
+	return h.with_cleanup(function(defer)
+		scratch = {}
+		defer(function()
+			h.with_cleanup(function(remove)
+				for _, buf in ipairs(scratch) do
+					remove(function()
+						if vim.api.nvim_buf_is_valid(buf) then
+							vim.api.nvim_buf_delete(buf, { force = true })
+						end
+					end)
+				end
+			end)
+		end)
+		vim.cmd("tabnew")
+		local guard = vim.api.nvim_get_current_tabpage()
+		scratch[#scratch + 1] = vim.api.nvim_get_current_buf()
+		defer(function()
+			if vim.api.nvim_tabpage_is_valid(guard) and #vim.api.nvim_list_tabpages() > 1 then
+				vim.api.nvim_set_current_tabpage(guard)
+				vim.cmd("tabclose!")
+			end
+		end)
+		defer(drop_pi_bufs)
+		vim.api.nvim_buf_set_lines(0, 0, -1, false, { "guard" })
+		return fn(guard, defer)
+	end)
+end
 
-	local ok, err = pcall(fn, guard)
-
-	drop_pi_bufs()
-	for _, buf in ipairs(scratch) do
-		pcall(vim.api.nvim_buf_delete, buf, { force = true })
+local function owned_window(defer, own_buffer)
+	local win = vim.api.nvim_get_current_win()
+	if own_buffer then
+		scratch[#scratch + 1] = vim.api.nvim_get_current_buf()
 	end
-	if vim.api.nvim_tabpage_is_valid(guard) then
-		vim.api.nvim_set_current_tabpage(guard)
-		vim.bo.modified = false
-		if #vim.api.nvim_list_tabpages() > 1 then
-			vim.cmd("tabclose")
+	defer(function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
 		end
-	end
-
-	if not ok then
-		error(err, 0)
-	end
+	end)
+	return win
 end
 
 return {
@@ -103,17 +120,38 @@ return {
 			h.eq(false, layout.owns_only_ui(), "the guard tab is separate UI")
 		end)
 
-		vim.cmd("tabnew")
-		vim.cmd("tabonly")
-		local foldtext = vim.api.nvim_get_option_value("foldtext", { scope = "global" })
-		local winfixheight = vim.api.nvim_get_option_value("winfixheight", { scope = "global" })
-		layout.open()
-		h.eq(true, layout.owns_only_ui(), "all remaining windows belong to pim")
-		layout.destroy()
-		h.eq(false, layout.owns_only_ui(), "a destroyed layout owns no UI")
-		h.eq(1, #vim.api.nvim_list_wins(), "test cleanup keeps Neovim alive")
-		h.eq(foldtext, vim.wo.foldtext, "the last window no longer has pim's foldtext")
-		h.eq(winfixheight, vim.wo.winfixheight, "the last window no longer has pim's fixed height")
+		-- The only-UI case is isolated so unrelated parent tabs are never closed.
+		h.with_cleanup(function(defer)
+			local child = vim.fn.jobstart({ vim.v.progpath, "--clean", "--headless", "--embed" }, { rpc = true })
+			h.ok(child > 0)
+			defer(function()
+				vim.fn.jobstop(child)
+				h.ok(vim.fn.jobwait({ child }, 3000)[1] ~= -1, "child exit was awaited")
+			end)
+			local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+			h.eq(
+				true,
+				vim.rpcrequest(
+					child,
+					"nvim_exec_lua",
+					[[
+				vim.opt.rtp:prepend(...)
+				local layout = require('pim.ui.layout')
+				local foldtext = vim.api.nvim_get_option_value('foldtext', {scope='global'})
+				local fixed = vim.api.nvim_get_option_value('winfixheight', {scope='global'})
+				layout.open()
+				assert(layout.owns_only_ui())
+				layout.destroy()
+				assert(not layout.owns_only_ui())
+				assert(#vim.api.nvim_list_wins() == 1)
+				assert(vim.wo.foldtext == foldtext)
+				assert(vim.wo.winfixheight == fixed)
+				return true
+			]],
+					{ root }
+				)
+			)
+		end)
 	end,
 
 	["a buffer whose name merely contains ours is left alone"] = function()
@@ -136,9 +174,9 @@ return {
 		guarded(function()
 			drop_pi_bufs()
 			local leftover = vim.api.nvim_create_buf(false, true)
+			scratch[#scratch + 1] = leftover
 			vim.b[leftover].pim_role = "transcript"
 			vim.api.nvim_buf_set_name(leftover, TRANSCRIPT)
-			scratch[#scratch + 1] = leftover
 
 			layout.open()
 
@@ -212,7 +250,7 @@ return {
 	end,
 
 	["new windows do not inherit pim window options"] = function()
-		guarded(function()
+		guarded(function(_, defer)
 			local foldtext = vim.api.nvim_get_option_value("foldtext", { scope = "global" })
 			local linebreak = vim.api.nvim_get_option_value("linebreak", { scope = "global" })
 			local fillchars = vim.api.nvim_get_option_value("fillchars", { scope = "global" })
@@ -227,7 +265,7 @@ return {
 
 			vim.api.nvim_set_current_win(transcript)
 			vim.cmd("split")
-			local ordinary = vim.api.nvim_get_current_win()
+			local ordinary = owned_window(defer)
 			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { win = ordinary }))
 			h.eq(fillchars, vim.api.nvim_get_option_value("fillchars", { win = ordinary }))
 			h.eq(linebreak, vim.api.nvim_get_option_value("linebreak", { win = ordinary }))
@@ -239,13 +277,13 @@ return {
 
 			vim.api.nvim_set_current_win(transcript)
 			vim.cmd("wincmd n")
-			ordinary = vim.api.nvim_get_current_win()
+			ordinary = owned_window(defer, true)
 			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { win = ordinary }), "<C-w><C-n> is clean")
 			vim.api.nvim_win_close(ordinary, true)
 
 			vim.api.nvim_set_current_win(input)
 			vim.cmd("new")
-			ordinary = vim.api.nvim_get_current_win()
+			ordinary = owned_window(defer, true)
 			h.eq(winfixheight, vim.api.nvim_get_option_value("winfixheight", { win = ordinary }))
 			h.eq(linebreak, vim.api.nvim_get_option_value("linebreak", { win = ordinary }))
 			h.eq(true, vim.api.nvim_get_option_value("winfixheight", { win = input }))
@@ -253,7 +291,7 @@ return {
 
 			vim.api.nvim_set_current_win(transcript)
 			vim.cmd("tabnew")
-			ordinary = vim.api.nvim_get_current_win()
+			ordinary = owned_window(defer, true)
 			h.eq(foldtext, vim.api.nvim_get_option_value("foldtext", { win = ordinary }))
 			h.eq(fillchars, vim.api.nvim_get_option_value("fillchars", { win = ordinary }))
 			vim.cmd("tabclose")

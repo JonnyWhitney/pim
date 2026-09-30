@@ -10,41 +10,59 @@ local function fake_pi_config()
 	config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua" } })
 end
 
-local function start_with_guard_tab()
-	fake_pi_config()
-
+local function test_tab(defer, text)
 	vim.cmd("tabnew")
-	vim.api.nvim_buf_set_lines(0, 0, -1, false, { "guard" })
-	local guard = vim.api.nvim_get_current_tabpage()
-
-	require("pim").start()
-	return guard, vim.api.nvim_get_current_tabpage()
+	local tab = vim.api.nvim_get_current_tabpage()
+	local buf = vim.api.nvim_get_current_buf()
+	defer(function()
+		if vim.api.nvim_buf_is_valid(buf) then
+			vim.api.nvim_buf_delete(buf, { force = true })
+		end
+	end)
+	defer(function()
+		if vim.api.nvim_tabpage_is_valid(tab) and #vim.api.nvim_list_tabpages() > 1 then
+			vim.api.nvim_set_current_tabpage(tab)
+			vim.cmd("tabclose!")
+		end
+	end)
+	if text then
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
+	end
+	return tab
 end
 
-local function cleanup_guard(guard)
-	if vim.api.nvim_tabpage_is_valid(guard) then
-		vim.api.nvim_set_current_tabpage(guard)
-		vim.bo.modified = false
-		if #vim.api.nvim_list_tabpages() > 1 then
-			vim.cmd("tabclose")
-		end
-	end
+local function with_guard_tab(fn)
+	return h.with_cleanup(function(defer)
+		fake_pi_config()
+		local guard = test_tab(defer, "guard")
+		defer(require("pim.lifecycle").cleanup)
+		require("pim").start()
+		return fn(guard, vim.api.nvim_get_current_tabpage())
+	end)
 end
 
 local function with_answer(answer, fn)
-	local prompts = {}
-	local real_select = vim.ui.select
-	---@diagnostic disable-next-line: duplicate-set-field
-	vim.ui.select = function(_, opts, on_choice)
-		prompts[#prompts + 1] = opts.prompt
-		on_choice(answer)
-	end
-	local ok, err = pcall(fn, prompts)
-	vim.ui.select = real_select
-	if not ok then
-		error(err, 0)
-	end
-	return prompts
+	return h.with_cleanup(function(defer)
+		local prompts, completed = {}, false
+		h.patch(defer, vim.ui, "select", function(_, opts, on_choice)
+			prompts[#prompts + 1] = opts.prompt
+			on_choice(answer)
+		end)
+		-- Failed waits can leave scheduled close prompts. The stub is kept through cleanup.
+		defer(function()
+			if not completed then
+				h.settle(50)
+			end
+		end)
+		defer(function()
+			if not completed then
+				require("pim.lifecycle").cleanup()
+			end
+		end)
+		fn(prompts)
+		completed = true
+		return prompts
+	end)
 end
 
 local function start_and_connect()
@@ -69,31 +87,83 @@ local function fake_argv()
 end
 
 return {
+	["startup and cleanup preserve old data in an isolated child"] = function()
+		h.with_cleanup(function(defer)
+			local directory = vim.fn.tempname()
+			defer(function()
+				h.eq(0, vim.fn.delete(directory, "rf"))
+			end)
+			vim.fn.mkdir(directory, "p")
+			local child = vim.fn.jobstart({ vim.v.progpath, "--clean", "--headless", "--embed" }, {
+				rpc = true,
+				env = { XDG_DATA_HOME = directory .. "/data", PI_CODING_AGENT_DIR = directory .. "/agent" },
+			})
+			h.ok(child > 0, "child Neovim was started")
+			defer(function()
+				vim.fn.jobstop(child)
+				h.ok(vim.fn.jobwait({ child }, 3000)[1] ~= -1, "child Neovim exit was awaited")
+			end)
+			defer(function()
+				vim.rpcrequest(child, "nvim_exec_lua", "require('pim.lifecycle').cleanup()", {})
+			end)
+			local result = vim.rpcrequest(
+				child,
+				"nvim_exec_lua",
+				[[
+				local root, isolated = ...
+				vim.opt.rtp:prepend(root)
+				local data = vim.fn.stdpath('data')
+				assert(vim.startswith(data, isolated .. '/data/'), 'data must be isolated')
+				local old_root = data .. '/pim/subagents/old-parent/old-invocation'
+				vim.fn.mkdir(old_root, 'p')
+				local files = {
+					['invocation.json'] = '{"schemaVersion":1,"invocationId":"old-invocation"}',
+					['child-1.jsonl'] = '{"type":"message","text":"retained content"}',
+					['orphan.json'] = '{"firstSeen":"old marker"}',
+				}
+				for name, text in pairs(files) do vim.fn.writefile({text}, old_root .. '/' .. name) end
+				local function unchanged()
+					for name, text in pairs(files) do
+						assert(vim.deep_equal({text}, vim.fn.readfile(old_root .. '/' .. name)), name .. ' changed')
+					end
+				end
+				require('pim.config').setup({pi_cmd={vim.v.progpath, '-l', root .. '/tests/fake_pi.lua'}})
+				require('pim').start()
+				unchanged()
+				require('pim.lifecycle').cleanup()
+				unchanged()
+				return true
+			]],
+				{ vim.fn.fnamemodify(tests_dir, ":h"), directory }
+			)
+			h.eq(true, result)
+		end)
+	end,
 	["a blank tab is reused instead of opening a new one"] = function()
-		vim.cmd("tabnew")
-		local tabs_before = #vim.api.nvim_list_tabpages()
-		local blank_tab = vim.api.nvim_get_current_tabpage()
+		h.with_cleanup(function(defer)
+			local blank_tab = test_tab(defer)
+			defer(require("pim.lifecycle").cleanup)
+			local tabs_before = #vim.api.nvim_list_tabpages()
 
-		layout.open()
+			layout.open()
 
-		h.eq(tabs_before, #vim.api.nvim_list_tabpages(), "no extra tab created")
-		h.eq(blank_tab, vim.api.nvim_get_current_tabpage(), "pi lives in the reused tab")
-		h.ok(layout.is_open())
+			h.eq(tabs_before, #vim.api.nvim_list_tabpages(), "no extra tab created")
+			h.eq(blank_tab, vim.api.nvim_get_current_tabpage(), "pi lives in the reused tab")
+			h.ok(layout.is_open())
+		end)
 	end,
 
 	["a tab with real content is left alone"] = function()
-		vim.cmd("tabnew")
-		vim.api.nvim_buf_set_lines(0, 0, -1, false, { "precious work" })
-		local tabs_before = #vim.api.nvim_list_tabpages()
-		local work_tab = vim.api.nvim_get_current_tabpage()
+		h.with_cleanup(function(defer)
+			local work_tab = test_tab(defer, "precious work")
+			defer(require("pim.lifecycle").cleanup)
+			local tabs_before = #vim.api.nvim_list_tabpages()
 
-		layout.open()
+			layout.open()
 
-		h.eq(tabs_before + 1, #vim.api.nvim_list_tabpages(), "new tab created")
-		h.ok(vim.api.nvim_get_current_tabpage() ~= work_tab, "pi opened away from the work tab")
-
-		vim.api.nvim_set_current_tabpage(work_tab)
-		vim.bo.modified = false
+			h.eq(tabs_before + 1, #vim.api.nvim_list_tabpages(), "new tab created")
+			h.ok(vim.api.nvim_get_current_tabpage() ~= work_tab, "pi opened away from the work tab")
+		end)
 	end,
 
 	["a missing pi binary is reported, not raised"] = function()
@@ -124,139 +194,126 @@ return {
 	end,
 
 	["stop destroys the pi UI as well as the process"] = function()
-		local guard, pi_tab = start_with_guard_tab()
-		local tabs_before = #vim.api.nvim_list_tabpages()
-		local transcript = assert(layout.transcript_buf())
-		local input = assert(layout.input_buf())
+		with_guard_tab(function(_, pi_tab)
+			local tabs_before = #vim.api.nvim_list_tabpages()
+			local transcript = assert(layout.transcript_buf())
+			local input = assert(layout.input_buf())
 
-		local prompts = with_answer("Yes", function()
-			require("pim").stop()
+			local prompts = with_answer("Yes", function()
+				require("pim").stop()
+			end)
+
+			h.eq(1, #prompts, "asked before leaving")
+			h.eq(false, client.is_running(), "pi was stopped")
+			h.eq(tabs_before - 1, #vim.api.nvim_list_tabpages(), "the pi tab is gone")
+			h.ok(not vim.api.nvim_tabpage_is_valid(pi_tab), "specifically the pi tab")
+			h.eq(false, layout.is_open())
+			h.eq(nil, layout.transcript_buf(), "the transcript reference was cleared")
+			h.eq(nil, layout.input_buf(), "the input reference was cleared")
+			h.eq(false, vim.api.nvim_buf_is_valid(transcript), "the transcript buffer was deleted")
+			h.eq(false, vim.api.nvim_buf_is_valid(input), "the input buffer was deleted")
 		end)
-
-		h.eq(1, #prompts, "asked before leaving")
-		h.eq(false, client.is_running(), "pi was stopped")
-		h.eq(tabs_before - 1, #vim.api.nvim_list_tabpages(), "the pi tab is gone")
-		h.ok(not vim.api.nvim_tabpage_is_valid(pi_tab), "specifically the pi tab")
-		h.eq(false, layout.is_open())
-		h.eq(nil, layout.transcript_buf(), "the transcript reference was cleared")
-		h.eq(nil, layout.input_buf(), "the input reference was cleared")
-		h.eq(false, vim.api.nvim_buf_is_valid(transcript), "the transcript buffer was deleted")
-		h.eq(false, vim.api.nvim_buf_is_valid(input), "the input buffer was deleted")
-
-		cleanup_guard(guard)
 	end,
 
 	["declining stop leaves everything running"] = function()
-		local guard, pi_tab = start_with_guard_tab()
-		local tabs_before = #vim.api.nvim_list_tabpages()
+		with_guard_tab(function(_, pi_tab)
+			local tabs_before = #vim.api.nvim_list_tabpages()
 
-		with_answer("No", function()
-			require("pim").stop()
+			with_answer("No", function()
+				require("pim").stop()
+			end)
+
+			h.eq(true, client.is_running(), "pi kept running")
+			h.eq(tabs_before, #vim.api.nvim_list_tabpages(), "no tab was closed")
+			h.ok(vim.api.nvim_tabpage_is_valid(pi_tab), "the pi tab is intact")
+			h.eq(true, layout.is_open())
 		end)
-
-		h.eq(true, client.is_running(), "pi kept running")
-		h.eq(tabs_before, #vim.api.nvim_list_tabpages(), "no tab was closed")
-		h.ok(vim.api.nvim_tabpage_is_valid(pi_tab), "the pi tab is intact")
-		h.eq(true, layout.is_open())
-
-		cleanup_guard(guard)
 	end,
 
 	["stop with confirm disabled asks nothing (:PiStop!)"] = function()
-		local guard = start_with_guard_tab()
+		with_guard_tab(function()
+			local prompts = with_answer("No", function()
+				require("pim").stop({ confirm = false })
+			end)
 
-		local prompts = with_answer("No", function()
-			require("pim").stop({ confirm = false })
+			h.eq(0, #prompts, "the bang form skips the prompt")
+			h.eq(false, client.is_running(), "pi was stopped anyway")
+			h.eq(false, layout.is_open())
 		end)
-
-		h.eq(0, #prompts, "the bang form skips the prompt")
-		h.eq(false, client.is_running(), "pi was stopped anyway")
-		h.eq(false, layout.is_open())
-
-		cleanup_guard(guard)
 	end,
 
 	["stop does not offer to close a tab that is already hidden"] = function()
-		local guard = start_with_guard_tab()
-		require("pim").toggle()
+		with_guard_tab(function()
+			require("pim").toggle()
 
-		local prompts = with_answer("Yes", function()
-			require("pim").stop()
+			local prompts = with_answer("Yes", function()
+				require("pim").stop()
+			end)
+
+			h.eq(1, #prompts)
+			h.eq("Stop pi?", prompts[1], "no promise to close a tab that is not there")
+			h.eq(false, client.is_running())
 		end)
-
-		h.eq(1, #prompts)
-		h.eq("Stop pi?", prompts[1], "no promise to close a tab that is not there")
-		h.eq(false, client.is_running())
-
-		cleanup_guard(guard)
 	end,
 
 	["closing the input window asks before tearing anything down"] = function()
-		local guard, pi_tab = start_with_guard_tab()
-
-		local prompts = with_answer("No", function()
-			vim.api.nvim_win_close(assert(layout.input_win()), true)
-			h.wait_until(function()
-				return layout.is_open()
-			end, "the declined close to restore the input window", 1000)
-		end)
-
-		h.eq(1, #prompts, "asked exactly once")
-		h.ok(prompts[1]:find("Stop pi", 1, true), "prompt names the consequence, got: " .. tostring(prompts[1]))
-
-		h.ok(layout.is_open(), "the input window came back")
-		h.eq(pi_tab, vim.api.nvim_get_current_tabpage(), "restored into the same tab")
-		h.eq(true, client.is_running(), "pi kept running")
-
-		cleanup_guard(guard)
-	end,
-
-	["confirming the close stops pi and closes the tab"] = function()
-		local guard, pi_tab = start_with_guard_tab()
-
-		with_answer("Yes", function()
-			vim.api.nvim_win_close(assert(layout.input_win()), true)
-			h.wait_until(function()
-				return not client.is_running()
-			end, "pi to stop after confirming the close", 3000)
-		end)
-
-		h.eq(false, client.is_running(), "pi was stopped")
-		h.ok(not vim.api.nvim_tabpage_is_valid(pi_tab), "the pi tab is gone")
-
-		cleanup_guard(guard)
-	end,
-
-	["declining twice keeps working"] = function()
-		local guard = start_with_guard_tab()
-
-		for attempt = 1, 2 do
+		with_guard_tab(function(_, pi_tab)
 			local prompts = with_answer("No", function()
 				vim.api.nvim_win_close(assert(layout.input_win()), true)
 				h.wait_until(function()
 					return layout.is_open()
-				end, "the input window to come back on attempt " .. attempt, 1000)
+				end, "the declined close to restore the input window", 1000)
 			end)
-			h.eq(1, #prompts, "asked on attempt " .. attempt)
-			h.ok(layout.is_open(), "restored on attempt " .. attempt)
-		end
 
-		cleanup_guard(guard)
+			h.eq(1, #prompts, "asked exactly once")
+			h.ok(prompts[1]:find("Stop pi", 1, true), "prompt names the consequence, got: " .. tostring(prompts[1]))
+
+			h.ok(layout.is_open(), "the input window came back")
+			h.eq(pi_tab, vim.api.nvim_get_current_tabpage(), "restored into the same tab")
+			h.eq(true, client.is_running(), "pi kept running")
+		end)
+	end,
+
+	["confirming the close stops pi and closes the tab"] = function()
+		with_guard_tab(function(_, pi_tab)
+			with_answer("Yes", function()
+				vim.api.nvim_win_close(assert(layout.input_win()), true)
+				h.wait_until(function()
+					return not client.is_running()
+				end, "pi to stop after confirming the close", 3000)
+			end)
+
+			h.eq(false, client.is_running(), "pi was stopped")
+			h.ok(not vim.api.nvim_tabpage_is_valid(pi_tab), "the pi tab is gone")
+		end)
+	end,
+
+	["declining twice keeps working"] = function()
+		with_guard_tab(function()
+			for attempt = 1, 2 do
+				local prompts = with_answer("No", function()
+					vim.api.nvim_win_close(assert(layout.input_win()), true)
+					h.wait_until(function()
+						return layout.is_open()
+					end, "the input window to come back on attempt " .. attempt, 1000)
+				end)
+				h.eq(1, #prompts, "asked on attempt " .. attempt)
+				h.ok(layout.is_open(), "restored on attempt " .. attempt)
+			end
+		end)
 	end,
 
 	["toggling the UI closed does not ask anything"] = function()
-		local guard = start_with_guard_tab()
+		with_guard_tab(function()
+			local prompts = with_answer("Yes", function()
+				require("pim").toggle()
+				h.settle(200)
+			end)
 
-		local prompts = with_answer("Yes", function()
-			require("pim").toggle()
-			h.settle(200)
+			h.eq(0, #prompts, "hiding the UI is not leaving")
+			h.eq(true, client.is_running(), "pi keeps running while hidden")
+			h.eq(false, layout.is_open())
 		end)
-
-		h.eq(0, #prompts, "hiding the UI is not leaving")
-		h.eq(true, client.is_running(), "pi keeps running while hidden")
-		h.eq(false, layout.is_open())
-
-		cleanup_guard(guard)
 	end,
 
 	["leaving Neovim stops the UI timers before pi shuts down"] = function()
@@ -270,33 +327,33 @@ return {
 			return count
 		end
 
-		local guard = start_with_guard_tab()
-		h.wait_until(client.is_running, "fake pi start", 5000)
-		local idle = active_timers()
-		require("pim.state").update({ run_active = true, is_streaming = true })
-		h.wait_until(function()
-			return active_timers() > idle
-		end, "the busy spinner timer", 2000)
+		with_guard_tab(function()
+			h.wait_until(client.is_running, "fake pi start", 5000)
+			local idle = active_timers()
+			require("pim.state").update({ run_active = true, is_streaming = true })
+			h.wait_until(function()
+				return active_timers() > idle
+			end, "the busy spinner timer", 2000)
 
-		-- Keep pi alive so only the exit hook itself can close the UI timers.
-		local real_stop = client.stop
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.stop = function() end
-		local ok, err = pcall(vim.api.nvim_exec_autocmds, "VimLeavePre", { group = "pim-shutdown" })
-		client.stop = real_stop
-		if not ok then
-			error(err, 0)
-		end
-		local after_hook = active_timers()
+			-- Keep pi alive so only the exit hook itself can close the UI timers.
+			local real_stop = client.stop
+			---@diagnostic disable-next-line: duplicate-set-field
+			client.stop = function() end
+			local ok, err = pcall(vim.api.nvim_exec_autocmds, "VimLeavePre", { group = "pim-shutdown" })
+			client.stop = real_stop
+			if not ok then
+				error(err, 0)
+			end
+			local after_hook = active_timers()
 
-		-- A second explicit shutdown closes nothing more when the hook already did the work.
-		statusline.shutdown()
-		require("pim.ui.transcript").shutdown()
-		h.eq(after_hook, active_timers(), "the UI timers are closed by the exit hook")
-		h.ok(after_hook <= idle, "no UI timer survives exit")
+			-- A second explicit shutdown closes nothing more when the hook already did the work.
+			statusline.shutdown()
+			require("pim.ui.transcript").shutdown()
+			h.eq(after_hook, active_timers(), "the UI timers are closed by the exit hook")
+			h.ok(after_hook <= idle, "no UI timer survives exit")
 
-		require("pim").stop({ confirm = false })
-		cleanup_guard(guard)
+			require("pim").stop({ confirm = false })
+		end)
 	end,
 
 	["repeated start/stop cycles accumulate nothing"] = function()
@@ -321,38 +378,38 @@ return {
 			}
 		end
 
-		local guard = start_with_guard_tab()
-		require("pim").stop({ confirm = false })
-		local baseline = census()
-
-		for cycle = 1, 3 do
-			require("pim").start()
+		with_guard_tab(function()
 			require("pim").stop({ confirm = false })
-			h.eq(baseline, census(), "state accumulated after cycle " .. cycle)
-		end
+			local baseline = census()
 
-		h.eq(0, baseline.shutdown, "stop removes the VimLeavePre autocmd")
-		h.eq(0, baseline.pi_buffers, "stop leaves no pim buffers")
+			for cycle = 1, 3 do
+				require("pim").start()
+				require("pim").stop({ confirm = false })
+				h.eq(baseline, census(), "state accumulated after cycle " .. cycle)
+			end
 
-		cleanup_guard(guard)
+			h.eq(0, baseline.shutdown, "stop removes the VimLeavePre autocmd")
+			h.eq(0, baseline.pi_buffers, "stop leaves no pim buffers")
+		end)
 	end,
 
 	["restart passes --session when the session file is known"] = function()
-		local session_file = vim.fn.tempname() .. ".jsonl"
-		local file = assert(io.open(session_file, "w"))
-		file:write('{"type":"session","version":3,"id":"x"}\n')
-		file:close()
+		h.with_cleanup(function(defer)
+			local session_file = vim.fn.tempname() .. ".jsonl"
+			defer(function()
+				h.eq(0, vim.fn.delete(session_file))
+			end)
+			vim.fn.writefile({ '{"type":"session","version":3,"id":"x"}' }, session_file)
 
-		start_and_connect()
+			start_and_connect()
 
-		require("pim.state").update({ session_file = session_file })
-		require("pim").restart()
+			require("pim.state").update({ session_file = session_file })
+			require("pim").restart()
 
-		local argv = fake_argv()
-		h.ok(vim.list_contains(argv, "--session"), "--session flag passed")
-		h.ok(vim.list_contains(argv, session_file), "session path passed")
-
-		os.remove(session_file)
+			local argv = fake_argv()
+			h.ok(vim.list_contains(argv, "--session"), "--session flag passed")
+			h.ok(vim.list_contains(argv, session_file), "session path passed")
+		end)
 	end,
 
 	["restart without a session file passes no --session"] = function()
@@ -387,24 +444,24 @@ return {
 			return require("pim.state").get().connected
 		end, "the queued fake pi connection", 5000)
 
-		local sent = {}
-		local real_request = client.request
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.request = function(command_type, params, callback)
-			sent[#sent + 1] = command_type
-			return real_request(command_type, params, callback)
-		end
-		require("pim.state").handle_event({ type = "agent_start" })
-		require("pim.state").handle_event({ type = "agent_end", willRetry = false })
-		require("pim").abort()
-		h.wait_until(function()
-			return sent[#sent] == "abort"
-		end, "clear_queue followed by abort", 5000)
-		client.request = real_request
+		h.with_cleanup(function(defer)
+			local sent = {}
+			local real_request = client.request
+			h.patch(defer, client, "request", function(command_type, params, callback)
+				sent[#sent + 1] = command_type
+				return real_request(command_type, params, callback)
+			end)
+			require("pim.state").handle_event({ type = "agent_start" })
+			require("pim.state").handle_event({ type = "agent_end", willRetry = false })
+			require("pim").abort()
+			h.wait_until(function()
+				return sent[#sent] == "abort"
+			end, "clear_queue followed by abort", 5000)
 
-		h.eq({ "clear_queue", "abort" }, sent)
-		local input_text = table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
-		h.eq("change direction", input_text, "the first queued message returns to input")
+			h.eq({ "clear_queue", "abort" }, sent)
+			local input_text = table.concat(vim.api.nvim_buf_get_lines(assert(layout.input_buf()), 0, -1, false), "\n")
+			h.eq("change direction", input_text, "the first queued message returns to input")
+		end)
 	end,
 
 	["agent abort still runs after clear_queue fails"] = function()
@@ -414,28 +471,22 @@ return {
 			return require("pim.state").get().connected
 		end, "the clear-failure fake pi connection", 5000)
 
-		local sent = {}
-		local notified = {}
-		local real_request, real_notify = client.request, vim.notify
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.request = function(command_type, params, callback)
-			sent[#sent + 1] = command_type
-			return real_request(command_type, params, callback)
-		end
-		vim.notify = function(message, level)
-			notified[#notified + 1] = { message = message, level = level }
-		end
-		require("pim.state").update({ run_active = true, is_streaming = true })
-		require("pim").abort()
-		local ok, err = pcall(function()
+		local sent, notified = {}, {}
+		h.with_cleanup(function(defer)
+			local real_request = client.request
+			h.patch(defer, client, "request", function(command_type, params, callback)
+				sent[#sent + 1] = command_type
+				return real_request(command_type, params, callback)
+			end)
+			h.patch(defer, vim, "notify", function(message, level)
+				notified[#notified + 1] = { message = message, level = level }
+			end)
+			require("pim.state").update({ run_active = true, is_streaming = true })
+			require("pim").abort()
 			h.wait_until(function()
 				return sent[#sent] == "abort"
 			end, "abort after clear_queue failure", 5000)
 		end)
-		client.request, vim.notify = real_request, real_notify
-		if not ok then
-			error(err, 0)
-		end
 
 		h.eq({ "clear_queue", "abort" }, sent)
 		h.ok(
@@ -485,33 +536,35 @@ return {
 	end,
 
 	["log clears for a new process but not session changes, toggles, or stop"] = function()
-		start_and_connect()
-		local log = require("pim.log")
-		log.add("*", "marker before session actions")
+		with_guard_tab(function()
+			start_and_connect()
+			local log = require("pim.log")
+			log.add("*", "marker before session actions")
 
-		require("pim.sessions").new()
-		h.wait_until(function()
-			return require("pim.state").get().session_id == "fresh-session"
-		end, "new session refresh", 5000)
-		require("pim").toggle()
-		require("pim").toggle()
-		h.ok(
-			table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
-			"new session and toggle keep the process log"
-		)
+			require("pim.sessions").new()
+			h.wait_until(function()
+				return require("pim.state").get().session_id == "fresh-session"
+			end, "new session refresh", 5000)
+			require("pim").toggle()
+			require("pim").toggle()
+			h.ok(
+				table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
+				"new session and toggle keep the process log"
+			)
 
-		require("pim").restart()
-		h.wait_until(function()
-			return require("pim.state").get().connected
-		end, "restart connection", 5000)
-		h.ok(
-			not table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
-			"restart clears the old process log"
-		)
+			require("pim").restart()
+			h.wait_until(function()
+				return require("pim.state").get().connected
+			end, "restart connection", 5000)
+			h.ok(
+				not table.concat(log.lines(), "\n"):find("marker before session actions", 1, true),
+				"restart clears the old process log"
+			)
 
-		log.add("*", "marker before stop")
-		require("pim").stop({ confirm = false })
-		h.ok(table.concat(log.lines(), "\n"):find("marker before stop", 1, true), "stop keeps the process log")
+			log.add("*", "marker before stop")
+			require("pim").stop({ confirm = false })
+			h.ok(table.concat(log.lines(), "\n"):find("marker before stop", 1, true), "stop keeps the process log")
+		end)
 	end,
 
 	["an intentional stop reports stopped with no exit code"] = function()

@@ -33,6 +33,91 @@ local function transcript_text()
 end
 
 return {
+	["subagent live and historical events use the generic transcript path"] = function()
+		layout.open()
+		local arguments = { agents = { { label = "review", prompt = "Review." } } }
+		local details = {
+			schemaVersion = 1,
+			invocationId = "retained-1",
+			mode = "single",
+			status = "completed",
+			transcriptDir = "/nonexistent/retained-1",
+			agents = {
+				{ id = "child-1", label = "review", status = "completed", transcriptPath = "/nonexistent/child.jsonl" },
+			},
+		}
+		local saved_details = vim.deepcopy(details)
+		h.with_cleanup(function(defer)
+			local original_require = require
+			h.patch(defer, _G, "require", function(name)
+				if name:match("^pim%.subagents") then
+					error("tool events must not inspect feature state or transcripts")
+				end
+				return original_require(name)
+			end)
+			h.patch(defer, io, "open", function()
+				error("tool metadata must not cause file reads")
+			end)
+			h.patch(defer, vim.fn, "readfile", function()
+				error("tool metadata must not cause file reads")
+			end)
+			local calls = {}
+			local original_set = transcript.set
+			h.patch(defer, transcript, "set", function(key, kind, rendered, opts)
+				calls[#calls + 1] = { key = key, kind = kind, rendered = rendered, opts = opts }
+				return original_set(key, kind, rendered, opts)
+			end)
+			events.handle({
+				type = "tool_execution_start",
+				toolCallId = "external-1",
+				toolName = "subagent",
+				args = arguments,
+			})
+			h.eq({ "▸ result(subagent) [running]" }, calls[1].rendered.lines)
+			events.handle({
+				type = "tool_execution_update",
+				toolCallId = "external-1",
+				toolName = "subagent",
+				partialResult = { content = { { type = "text", text = "partial text" } }, details = details },
+			})
+			h.ok(transcript_text():find("partial text", 1, true))
+			events.handle({
+				type = "tool_execution_end",
+				toolCallId = "external-1",
+				toolName = "subagent",
+				result = { content = { { type = "text", text = "final text" } }, details = details },
+			})
+			h.eq(3, #calls)
+			for _, call in ipairs(calls) do
+				h.eq("tool-external-1", call.key)
+				h.eq("tool", call.kind)
+			end
+			h.eq(nil, calls[1].opts)
+			h.eq(nil, calls[2].opts)
+			h.eq({ final = true }, calls[3].opts)
+			h.eq({ "▸ result(subagent)", "```", "final text", "```" }, calls[3].rendered.lines)
+			h.eq({ { first = 0, last = 3, kind = "tool_results" } }, calls[3].rendered.folds)
+			h.ok(not transcript_text():find("partial text", 1, true))
+			events.load_messages({
+				{
+					role = "assistant",
+					content = { { type = "toolCall", id = "external-1", name = "subagent", arguments = arguments } },
+				},
+				{
+					role = "toolResult",
+					toolCallId = "external-1",
+					toolName = "subagent",
+					content = { { type = "text", text = "final text" } },
+					details = details,
+				},
+			})
+			local rendered = transcript_text()
+			h.ok(rendered:find("▸ tool(subagent)\n```json", 1, true))
+			h.ok(rendered:find('"prompt": "Review."', 1, true), "historical arguments are retained")
+			h.ok(rendered:find(table.concat(calls[3].rendered.lines, "\n"), 1, true))
+			h.eq(saved_details, details, "extension metadata is not rewritten")
+		end)
+	end,
 	["summary events and history add no transcript content or spacing"] = function()
 		layout.open()
 		local user = { role = "user", content = "before" }

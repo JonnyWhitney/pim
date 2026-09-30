@@ -14,6 +14,7 @@ CONTENTS                                                        *pim-toc*
   5. Completion ................................... |pim-completion|
   6. Extension dialogs ............................ |pim-dialogs|
   7. Troubleshooting .............................. |pim-troubleshooting|
+  8. Development .................................. |pim-development|
 
 ==============================================================================
 1. INTRODUCTION                                        *pim-introduction*
@@ -36,10 +37,8 @@ hidden. Folds can be toggled with <Tab> or native Neovim fold commands.
 Manual choices are preserved per window during updates. Defaults are reapplied
 when history is reloaded or a buffer or window is recreated.
 
-Neovim nightly and Pi 0.99.0 or newer are required. The backend is tested
-against Pi 0.99.0. Subagents are enabled by default.
+Neovim nightly and Pi 0.99.0 or newer are required.
 The Neovim client is written in Lua without plugin dependencies.
-A bundled TypeScript backend is executed by Pi. No user build step is required.
 Other Neovim releases are not supported.
 
 The transcript winbar shows the provider, model, thinking level, pi
@@ -140,21 +139,6 @@ Start with |:PiStart|. To start Neovim in the pi UI, define this alias:
 :PiThinking                                                      *:PiThinking*
     Select a thinking level that the current model supports. pim gets this
     list from pi. A fallback list is used if the levels cannot be retrieved.
-
-:PiAgents[!]                                                        *:PiAgents*
-    Select and open a subagent invocation from the current parent session.
-    Use [!] to include retained invocations from other parent sessions.
-
-:PiAgentTranscript                                        *:PiAgentTranscript*
-    Select and open a subagent transcript from the current parent session.
-
-:PiAgentStop[!]
-    An active child is selected and stopped. With !, an invocation is stopped.
-    The parent run is not aborted. See |:PiAgentStop|.
-
-:PiAgentClean[!]
-    Orphaned transcripts are cleaned. With !, the grace period is bypassed.
-    Active and ambiguous records are retained. See |:PiAgentClean|.
 
 :PiRestart                                                        *:PiRestart*
     Restart pi. pim resumes the current session if its session file exists.
@@ -310,7 +294,6 @@ Installing Blink alone is not enough.
 
 The pim provider is registered through ordinary Blink source options.
 Existing menus, keymaps, documentation, ghost text, and selection are retained.
-The former pim.completion.blink.setup(sources) helper has been removed.
 
 pim must be available on runtimepath when Blink is configured. With lazy.nvim,
 "JonnyWhitney/pim" can be added to Blink's existing dependencies. Other
@@ -345,8 +328,8 @@ prevented by text edits. Full-token and cursor-position replacement are supporte
 through completion.keyword.range. Existing filetype overrides are left intact.
 
 File completion must be supplied by a separate source, such as Blink's path
-provider. Recursive project-file search, including @config, is no longer supplied
-by pim. An initial / may be matched by both command and path sources.
+provider. Recursive project-file search is not supplied by pim. An initial /
+may be matched by both command and path sources.
 
 No selection, insertion, or menu settings are overridden. In particular,
 preselect = false and auto_insert = false can be retained. No native popup,
@@ -368,18 +351,6 @@ coexistence, lifecycle, and filetype overrides are checked in a clean child
 Neovim instance. The default test suite requires no Blink dependency and
 includes a clean child Neovim check of input completion non-interference.
 
-MIGRATION
-
-- The pim.completion.blink.setup(sources) helper has been removed. Standard
-  provider registration is shown above.
-- Native omni completion and automatic / and @ mappings have been removed.
-  The generic Blink omni source may still be needed by other buffers.
-- Pim file completion, recursive discovery, caches, and file APIs have been removed.
-  File completion must be configured through a separate Blink source.
-- completion.respect_gitignore and completion.exclude have been removed.
-  The completion table should be removed from require("pim").setup() options.
-- Prompt submission and pi's handling of manually entered references are unchanged.
-
 Validation: mise run test completion
 Command metadata, context boundaries, edits, and input lifecycle without Blink
 are covered. Existing completion settings and mappings are checked for
@@ -388,18 +359,28 @@ preservation. File scans and subprocesses must not be started by typing referenc
 ==============================================================================
 6. EXTENSION DIALOGS                                        *pim-dialogs*
 
-Extensions send UI requests through pi. pim displays these requests.
+Externally installed Pi extensions are supported through Pi's ordinary
+discovery or explicit --extension arguments in args. See |pim-setup|.
 
-- select and confirm requests use |vim.ui.select()|.
-- input requests use |vim.ui.input()|.
-- editor requests open a scratch split. <CR><CR> submits and q cancels.
+Extension tool calls are displayed with ordinary tool headers and JSON
+arguments. Text results are displayed in fenced output blocks. The configured
+tool-call and result fold defaults are applied to live output and saved history.
 
-Plugins that change vim.ui.* can change these dialogs. The winbar shows
-extension status entries and the first line of extension widgets.
+Extension UI requests are received through pi:
 
-pi resolves a timed-out dialog with its default response. pim then
-abandons the dialog. pim sends cancellation for an unknown request method.
-This prevents a newer extension from waiting without a response.
+- select and confirm requests are displayed through |vim.ui.select()|.
+- input requests are displayed through |vim.ui.input()|.
+- editor requests are opened in a scratch split. Submission is mapped to
+  <CR><CR>, and cancellation is mapped to q.
+- Notifications are displayed through |vim.notify()|.
+
+The appearance of these dialogs can be changed by plugins that replace vim.ui.*.
+Extension status entries and the first line of each extension widget are shown
+in the winbar.
+
+A timed-out dialog is resolved by pi with its default response. The dialog is
+then abandoned by pim. Unknown request methods are answered with cancellation.
+Newer extensions are not left waiting without a response.
 
 ==============================================================================
 7. TROUBLESHOOTING                                  *pim-troubleshooting*
@@ -453,147 +434,41 @@ plugins can provide automatic closing.
 Queued steer and follow-up messages use virtual lines. You cannot yank them.
 
 ==============================================================================
-SUBAGENTS                                                     *pim-subagents*
+8. DEVELOPMENT                                                *pim-development*
 
-Dynamic children are created by the calling model through the subagent tool.
-No role definitions or agent files are loaded. The backend is enabled only in
-PIM RPC mode. Native Pi terminal rendering is not provided.
+Neovim nightly and Pi 0.99.0 or newer are required. Stylua 2.5.2 and
+lua-language-server 3.18.2 are pinned in mise.toml for Lua development.
+Neovim and Pi must be installed separately.
 
-Activation can be disabled through |pim-setup|: >lua
-  require("pim").setup({ subagents = { enabled = false } })
-<
-When disabled, no backend argument or private host environment is added.
-Unknown nested configuration keys are reported with their full paths.
-The bundle and transcript root are checked by :checkhealth pim. Startup is
-rejected if the enabled bundle is missing. Imports are supplied by Pi.
+  mise install                    Lua development tools are installed.
+  mise run verify                 Lua checks are run in sequence.
+  mise run test                   The headless Lua suite is run.
+  mise run test bash              Tests matching "bash" are run.
+  mise run check                  :checkhealth pim is run in a clean instance.
+  mise run fmt                    Lua is formatted with Stylua.
+  mise run fmt:check              Lua formatting is checked without changes.
+  mise run lint                   Lua is analyzed; warnings cause failure.
+  mise run test:blink /path/to/blink.cmp '' lua
+                                  Optional Blink checks are run.
 
-Tool input uses one agents array with one to eight entries: >json
-  {"agents":[{"label":"review","prompt":"Review the parser.",
-    "tools":["read","grep","find","ls"],
-    "model":"anthropic/claude-sonnet-4-6","thinkingLevel":"high"}]}
-<
-Required fields: label, prompt, tools, model, thinkingLevel.
-An empty tools array is permitted. An exact provider/model identifier is
-required. Thinking levels are off, minimal, low, medium, high, xhigh, max.
-Levels may be clamped by Pi for the selected model.
-No model, tools, thinking level, or parent conversation is inherited.
+verify is run in this order: fmt:check, lint, test, then check.
+Formatting differences, Lua analysis warnings, and test failures are rejected.
+Health output must be inspected separately from the task exit status.
+Optional Blink checkout requirements are described in |pim-blink|.
 
-Optional fields:
-  systemPrompt       Caller-supplied system instructions.
-  systemPromptMode   append (default) or replace. A nonempty replacement is
-                     required. Enabled project context may still be added.
-  context            Additional caller text, separated from the task.
-  projectContext     true (default) or false.
-  cwd                Child directory; the parent directory is used by default.
+Pi RPC responses are simulated by tests/fake_pi.lua. Invalid JSON, incomplete
+lines, and large payloads are supplied by its hostile scenario.
 
-Task text is supplied through standard input. System prompts are supplied
-through temporary files with user-only permissions and removed afterward.
-Project resources are approved only when the parent project is trusted and
-its canonical cwd is unchanged. Trust is not transferred to a different cwd.
-With projectContext=false, context files, extension discovery, skills, and
-prompt-template discovery are disabled. Model settings and credentials remain
-available. A private child policy guard is explicitly loaded in every child.
-These controls are not an operating-system sandbox.
+Maintainer notes ~
 
-At most four child processes are run across all calls. Parallel tool lists are
-restricted to built-in read, grep, find, ls. Extension discovery is disabled
-in parallel mode to prevent overrides. All parallel lists are checked before
-execution. A single child can use any available Pi tool except subagent.
-Unknown tools and unresolved models are reported as child failures. Other
-children are not stopped by one child's failure.
+Extension UI requests are routed through lua/pim/rpc/client.lua to
+lua/pim/ui/dialogs.lua. Ordinary tool output is handled by
+lua/pim/render/tool.lua. Result metadata is retained without extension-specific
+interpretation.
 
-Parent abort terminates all children with SIGTERM. SIGKILL is sent after
-5000 ms if needed. Final results and nested usage are returned in input order.
-Parent output is capped at 50 KiB and 2000 lines in aggregate. A smaller
-per-child share is used for parallel output. Truncation is marked. Details
-contain bounded summaries and file references, not the full child history.
-
-Storage:
-  stdpath("data")/pim/subagents/<parent-session-id>/<invocation-id>/
-    invocation.json
-    <child-id>.jsonl
-    <child-id>.summary.json
-
-Full events, configuration, thinking, tool calls, usage, and final output are
-stored. Directories use 0700; files use 0600. Symlink storage paths are
-rejected. Manifests are replaced atomically. Complete JSONL records remain
-readable after interruption. Sensitive prompts and outputs may be included. No automatic cleanup is
-performed.
-
-The parent transcript renders only the child count and aggregate statuses.
-Use |:PiAgents| or |:PiAgentTranscript| to open a read-only inspector. One
-pim://subagents/<invocation-id> buffer is reused for each invocation. Parallel
-children have separate foldable sections. Live parent updates cause only new
-complete JSONL records to be read. Completed transcripts can be reopened after
-a restart. Incomplete final lines are retained until they are completed.
-Malformed records are reported and skipped. Later valid records still render.
-Missing or unsafe transcript paths are shown as unavailable.
-
-:PiAgentStop                                                *:PiAgentStop*
-  One active child is selected and stopped without aborting the parent.
-:PiAgentStop!
-  An invocation is selected. All active and queued children are stopped.
-
-SIGTERM is followed by SIGKILL after 5000 ms when needed. Stopped children
-are recorded as stopped with stoppedBy: "user". After termination and durable
-transcript acknowledgement, one normal RPC steering message is queued for the
-parent. Stop-all labels are combined in one message. Duplicate, completed,
-failed, or unacknowledged requests are not used for steering. Parent aborts
-remain aborted with stoppedBy: "parent_abort" and are not used for steering.
-
-:PiAgentClean                                               *:PiAgentClean*
-  Eligible orphaned transcript directories are removed. Removed, retained,
-  and skipped counts are reported.
-:PiAgentClean!
-  The grace period is bypassed for orphans only.
-
-Transcripts are retained while the parent session file exists. Missing parent
-files are first recorded in private orphaned.json files during cleanup. The
-orphan grace period starts at that observation, not the last child update.
-The default is 30 days. A nonnegative whole number is required:
->
-  require("pim").setup({ subagents = { orphan_grace_days = 30 } })
-<
-With 0, eligible orphans are removed during the first cleanup. No cleanup is
-run automatically. Active invocations, including stored pending or running
-states after interruption, are retained even with !. Invalid manifests,
-missing parent-file references, symlinks, unexpected files, and ambiguous
-paths are reported and skipped. Interrupted active records require manual
-review. Activity is not inferred from age. These checks are not a sandbox
-against concurrent filesystem changes.
-
-==============================================================================
-DEVELOPMENT                                                   *pim-development*
-
-Node.js 24.21.0 (the latest LTS release) and pnpm 12.4.2 are pinned in
-pi-extensions/mise.toml. These tool versions are scoped to pi-extensions/.
-Node.js 24.21.0 or a newer 24.x release is required for backend development.
-Other Node.js majors are rejected by the backend development commands.
-Pi API development dependencies are pinned to 0.99.0.
-
-Strict type checking is provided by tsgo from @typescript/native-preview.
-TypeScript 7.0.2 is included for editors. Linting is provided by Oxlint 1.83.0;
-formatting is provided by Oxfmt 0.68.0. The extension and its tests are covered.
-No development toolchain is required by the Neovim client.
-
-The TypeScript package, lockfile, configs, dependencies, scripts, and tests
-are contained in pi-extensions/. Oxfmt is restricted to that package. No
-Oxfmt config is applied to the repository root or Lua client. Shared JSON
-fixtures remain in tests/fixtures/subagents/ and are not formatted by Oxfmt.
-Backend checks are delegated by the root mise tasks.
-
-  mise install                    Install Lua development tools.
-  mise -C pi-extensions install    Install backend development tools.
-  mise -C pi-extensions exec -- pnpm install --frozen-lockfile
-                                  Install locked backend dependencies.
-  mise run fmt                    Format Lua and the Pi extension.
-  mise run fmt:check              Check both formats without changes.
-  mise run lint                   Run lua-language-server and Oxlint.
-  mise run typecheck              Run strict tsgo checking.
-  mise run verify                 Run all checks, tests, and health checks.
-  mise -C pi-extensions run verify Run backend checks only.
-  mise -C pi-extensions run fmt    Format the backend package only.
-
-Formatting differences, lint warnings, and type errors are rejected by verify.
+Test cleanup must be registered before later setup or assertions can fail.
+Temporary replacements and test-created resources must be restored after success
+or failure. Protected cleanup helpers are documented beside their code in
+tests/helpers.lua.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

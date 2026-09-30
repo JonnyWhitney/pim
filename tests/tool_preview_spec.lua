@@ -2,17 +2,16 @@ local h = require("helpers")
 local preview = require("pim.tool_preview")
 
 local function with_file(content, callback)
-	local directory = vim.fn.tempname()
-	vim.fn.mkdir(directory, "p")
-	local path = directory .. "/sample.txt"
-	vim.fn.writefile(vim.split(content, "\n", { plain = true }), path, "b")
-	local ok, err = xpcall(function()
-		callback(path)
-	end, debug.traceback)
-	vim.fn.delete(directory, "rf")
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		local directory = vim.fn.tempname()
+		defer(function()
+			h.eq(0, vim.fn.delete(directory, "rf"))
+		end)
+		vim.fn.mkdir(directory, "p")
+		local path = directory .. "/sample.txt"
+		vim.fn.writefile(vim.split(content, "\n", { plain = true }), path, "b")
+		return callback(path)
+	end)
 end
 
 return {

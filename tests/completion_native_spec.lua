@@ -3,16 +3,30 @@ local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 
 return {
 	["input lifecycle leaves completion untouched without Blink"] = function()
-		local child = vim.fn.jobstart({ vim.v.progpath, "--headless", "--clean", "--embed" }, { rpc = true })
-		---@return any
-		local function lua(code, ...)
-			return vim.rpcrequest(child, "nvim_exec_lua", code, { ... })
-		end
-		local function input(keys)
-			vim.rpcrequest(child, "nvim_input", keys)
-			h.settle(50)
-		end
-		local ok, err = pcall(function()
+		h.with_cleanup(function(defer)
+			local child = vim.fn.jobstart({ vim.v.progpath, "--headless", "--clean", "--embed" }, { rpc = true })
+			h.ok(child > 0)
+			defer(function()
+				vim.fn.jobstop(child)
+				h.ok(vim.fn.jobwait({ child }, 3000)[1] ~= -1, "child exit was awaited")
+			end)
+			---@return any
+			local function lua(code, ...)
+				return vim.rpcrequest(child, "nvim_exec_lua", code, { ... })
+			end
+			local function input(keys)
+				vim.rpcrequest(child, "nvim_input", keys)
+				h.settle(50)
+			end
+			defer(function()
+				lua("require('pim.lifecycle').cleanup()")
+			end)
+			defer(function()
+				lua([[
+				if pim_test_system then vim.system = pim_test_system end
+				if pim_test_opendir then vim.uv.fs_opendir = pim_test_opendir end
+			]])
+			end)
 			lua(
 				[[
 				local root = ...
@@ -67,10 +81,5 @@ return {
 			h.eq(false, lua("return package.loaded['blink.cmp'] ~= nil"))
 			h.eq(false, lua("return package.loaded['pim.completion.blink'] ~= nil"))
 		end)
-		pcall(lua, "require('pim.lifecycle').cleanup()")
-		pcall(vim.fn.jobstop, child)
-		if not ok then
-			error(err, 0)
-		end
 	end,
 }

@@ -11,6 +11,70 @@ local function assistant(content, extra)
 end
 
 return {
+	["subagent calls use ordinary headers complete JSON and call folds"] = function()
+		local arguments = { agents = { { label = "review", prompt = string.rep("Review everything. ", 20) } } }
+		local block = message_renderer.render(assistant({
+			{ type = "toolCall", id = "external-1", name = "subagent", arguments = arguments },
+		}))
+		h.eq("▸ tool(subagent)", block.lines[3])
+		h.eq("```json", block.lines[4])
+		h.eq(arguments, vim.json.decode(table.concat(vim.list_slice(block.lines, 5, #block.lines - 1), "\n")))
+		h.eq({ { first = 2, last = #block.lines - 1, kind = "tool_calls", id = "external-1" } }, block.folds)
+	end,
+	["subagent metadata is inert in live and historical results"] = function()
+		local old_details = {
+			schemaVersion = 1,
+			invocationId = "old-invocation",
+			mode = "single",
+			status = "completed",
+			transcriptDir = "/nonexistent/old-invocation",
+			agents = {
+				{ id = "child-1", label = "review", status = "completed", transcriptPath = "/nonexistent/child.jsonl" },
+			},
+		}
+		for _, details in ipairs({
+			old_details,
+			{ schemaVersion = 2 },
+			{ arbitrary = { "value" } },
+			"opaque",
+			false,
+			42,
+		}) do
+			local result = { content = { { type = "text", text = "fallback\nfinal text" } }, details = details }
+			local live = tool_renderer.execution({ toolName = "subagent", result = result })
+			h.eq({ "▸ result(subagent)", "```", "fallback", "final text", "```" }, live.lines)
+			h.eq({ { first = 0, last = 4, kind = "tool_results" } }, live.folds)
+			h.eq(
+				live,
+				message_renderer.render({
+					role = "toolResult",
+					toolName = "subagent",
+					toolCallId = "old-call",
+					content = result.content,
+					details = details,
+				})
+			)
+			local empty = tool_renderer.execution({ toolName = "subagent", result = { details = details } })
+			h.eq({ lines = { "▸ result(subagent)" }, folds = {} }, empty)
+			h.eq(empty, message_renderer.render({ role = "toolResult", toolName = "subagent", details = details }))
+		end
+	end,
+	["subagent results use ordinary running and error marks"] = function()
+		for _, case in ipairs({
+			{ running = true, suffix = " [running]" },
+			{ isError = true, suffix = " ✘ error" },
+			{ suffix = "" },
+		}) do
+			local block = tool_renderer.execution({
+				toolName = "subagent",
+				running = case.running,
+				isError = case.isError,
+				result = "text",
+			})
+			h.eq({ "▸ result(subagent)" .. case.suffix, "```", "text", "```" }, block.lines)
+			h.eq({ { first = 0, last = 3, kind = "tool_results" } }, block.folds)
+		end
+	end,
 	["only chat role headers receive structural metadata"] = function()
 		for _, role in ipairs({ "user", "assistant", "custom" }) do
 			local text = "### You\n```markdown\n### pi\n```"

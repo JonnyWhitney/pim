@@ -130,40 +130,43 @@ return {
 	end,
 
 	["abort routes to abort_bash while a command is running"] = function()
-		local state = require("pim.state")
-		local sent = {}
-		local real_request = client.request
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.request = function(command_type, params, callback)
-			sent[#sent + 1] = command_type
-			return real_request(command_type, params, callback)
-		end
+		h.with_cleanup(function(defer)
+			local state = require("pim.state")
+			local sent = {}
+			local real_request = client.request
+			h.patch(defer, client, "request", function(command_type, params, callback)
+				sent[#sent + 1] = command_type
+				return real_request(command_type, params, callback)
+			end)
 
-		state.update({ bash_running = true, run_active = true, is_streaming = true })
-		require("pim").abort()
-		state.update({ bash_running = false })
-		require("pim").abort()
+			state.update({ bash_running = true, run_active = true, is_streaming = true })
+			require("pim").abort()
+			state.update({ bash_running = false })
+			require("pim").abort()
 
-		client.request = real_request
-		state.update({ run_active = false, is_streaming = false })
+			state.update({ run_active = false, is_streaming = false })
 
-		h.eq({ "abort_bash", "clear_queue", "abort" }, sent, "bash stays direct; agent abort clears its queue first")
+			h.eq(
+				{ "abort_bash", "clear_queue", "abort" },
+				sent,
+				"bash stays direct; agent abort clears its queue first"
+			)
+		end)
 	end,
 
 	["abort does nothing when nothing is running"] = function()
-		local state = require("pim.state")
-		local sent = {}
-		local real_request = client.request
-		---@diagnostic disable-next-line: duplicate-set-field
-		client.request = function(command_type)
-			sent[#sent + 1] = command_type
-		end
+		h.with_cleanup(function(defer)
+			local state = require("pim.state")
+			local sent = {}
+			h.patch(defer, client, "request", function(command_type)
+				sent[#sent + 1] = command_type
+			end)
 
-		state.update({ bash_running = false, run_active = false, is_streaming = false })
-		require("pim").abort()
+			state.update({ bash_running = false, run_active = false, is_streaming = false })
+			require("pim").abort()
 
-		client.request = real_request
-		h.eq({}, sent, "<C-c> stays harmless at rest")
+			h.eq({}, sent, "<C-c> stays harmless at rest")
+		end)
 	end,
 
 	["the winbar spins while a command runs"] = function()

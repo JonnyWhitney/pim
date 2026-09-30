@@ -26,6 +26,19 @@ local function with_agent_dir(directory, fn)
 end
 
 return {
+	["defaults and default setup have no subagents group"] = function()
+		h.eq(nil, config.defaults.subagents)
+		h.eq(nil, config.setup().subagents)
+	end,
+	["old subagents options receive the ordinary top-level unknown warning"] = function()
+		for _, value in ipairs({ false, { enabled = false }, { enabled = "yes", orphan_grace_days = -1 } }) do
+			local warning = assert(setup_capturing_warning({ subagents = value }))
+			h.ok(warning:find("subagents", 1, true))
+			h.ok(not warning:find("subagents.", 1, true), "only the top-level unknown key is named")
+			h.ok(not warning:find("enabled", 1, true), "nested feature validation is not used")
+			h.ok(not warning:find("orphan_grace_days", 1, true))
+		end
+	end,
 	["removed completion settings are reported as unknown"] = function()
 		h.eq(nil, config.setup().completion)
 		local warning = assert(setup_capturing_warning({ completion = { respect_gitignore = false, exclude = {} } }))

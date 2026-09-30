@@ -22,25 +22,19 @@ nvim --clean --headless \
 """
 
 [tasks.verify]
-description = "Run every check: formatting, lint, tests, health"
+description = "Run Lua formatting, analysis, tests, and health checks"
 # Run checks in sequence. This shows the first failure without mixed output.
 run = [
 	"mise run fmt:check",
 	"mise run lint",
-	"mise run typecheck",
 	"mise run test",
-	"mise -C pi-extensions run test",
 	"mise run check",
 ]
 
-[tasks.typecheck]
-description = "Type-check the Pi extension and its tests with tsgo"
-run = "mise -C pi-extensions run typecheck"
-
 [tasks.fmt]
-description = "Format Lua with Stylua and the Pi extension with Oxfmt"
-run = ["stylua lua plugin tests examples", "mise -C pi-extensions run fmt"]
+description = "Format Lua with Stylua"
+run = "stylua lua plugin tests examples"
 
 [tasks."fmt:check"]
-description = "Check Lua and Pi extension formatting"
-run = ["stylua --check lua plugin tests examples", "mise -C pi-extensions run fmt:check"]
+description = "Check Lua formatting"
+run = "stylua --check lua plugin tests examples"

@@ -59,8 +59,6 @@ function M.check()
 		)
 	end
 
-	require("pim.subagents").check(health)
-
 	local session_root = require("pim.config").pi_sessions_dir()
 	if vim.uv.fs_stat(session_root) then
 		health.ok("pi session directory exists: " .. session_root)
