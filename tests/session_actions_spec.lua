@@ -89,22 +89,22 @@ return {
 
 		local ok, err = pcall(function()
 			for _, case in ipairs(cases) do
-				local original_rpc = client[case.rpc]
-				local notifications = {}
-				client[case.rpc] = function(...)
-					local callback = select(select("#", ...), ...)
-					callback(false, "boom")
-				end
-				vim.notify = function(message, level)
-					notifications[#notifications + 1] = { message = message, level = level }
-				end
+				h.with_cleanup(function(defer)
+					local notifications = {}
+					h.patch(defer, client, case.rpc, function(...)
+						local callback = select(select("#", ...), ...)
+						callback(false, "boom")
+					end)
+					vim.notify = function(message, level)
+						notifications[#notifications + 1] = { message = message, level = level }
+					end
 
-				case.run()
-				client[case.rpc] = original_rpc
+					case.run()
 
-				h.eq(1, #notifications, case.action .. " reports one error")
-				h.ok(notifications[1].message:find(case.action .. " failed: boom", 1, true))
-				h.eq(vim.log.levels.ERROR, notifications[1].level)
+					h.eq(1, #notifications, case.action .. " reports one error")
+					h.ok(notifications[1].message:find(case.action .. " failed: boom", 1, true))
+					h.eq(vim.log.levels.ERROR, notifications[1].level)
+				end)
 			end
 		end)
 		sessions.refresh = original_refresh
@@ -147,21 +147,21 @@ return {
 
 		local ok, err = pcall(function()
 			for _, case in ipairs(cases) do
-				local original_rpc = client[case.rpc]
-				local notified
-				client[case.rpc] = function(...)
-					local callback = select(select("#", ...), ...)
-					callback(true, case.data)
-				end
-				vim.notify = function(message, level)
-					notified = { message = message, level = level }
-				end
+				h.with_cleanup(function(defer)
+					local notified
+					h.patch(defer, client, case.rpc, function(...)
+						local callback = select(select("#", ...), ...)
+						callback(true, case.data)
+					end)
+					vim.notify = function(message, level)
+						notified = { message = message, level = level }
+					end
 
-				case.run()
-				client[case.rpc] = original_rpc
+					case.run()
 
-				h.ok(notified.message:find(case.action .. " returned invalid data", 1, true))
-				h.eq(vim.log.levels.WARN, notified.level)
+					h.ok(notified.message:find(case.action .. " returned invalid data", 1, true))
+					h.eq(vim.log.levels.WARN, notified.level)
+				end)
 			end
 		end)
 		sessions.refresh = original_refresh
@@ -189,6 +189,7 @@ return {
 		client.switch_session = function()
 			switched = switched + 1
 		end
+		---@diagnostic disable-next-line: duplicate-set-field
 		vim.ui.select = function(_, _, callback)
 			choose = callback
 		end

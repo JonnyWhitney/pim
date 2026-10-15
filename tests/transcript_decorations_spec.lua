@@ -40,17 +40,17 @@ local function dividers()
 end
 
 local function with_highlights(names, callback)
-	local original = {}
-	for _, name in ipairs(names) do
-		original[name] = vim.api.nvim_get_hl(0, { name = name, create = false })
-	end
-	local ok, err = pcall(callback)
-	for name, highlight in pairs(original) do
-		vim.api.nvim_set_hl(0, name, highlight)
-	end
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		for _, name in ipairs(names) do
+			local original = vim.api.nvim_get_hl(0, { name = name, create = false })
+			defer(function()
+				-- Read-back highlight attributes are accepted by Neovim.
+				---@diagnostic disable-next-line: param-type-mismatch
+				vim.api.nvim_set_hl(0, name, original)
+			end)
+		end
+		return callback(defer)
+	end)
 end
 
 return {
@@ -83,35 +83,45 @@ return {
 	end,
 
 	["decorations do not change copied text or screen height"] = function()
-		layout.open()
-		put("user", "user", "question")
-		put("assistant", "assistant", "answer\n```lua\nreturn true\n```")
-		local expected = lines()
-		local win = assert(layout.transcript_win())
-		local height = vim.api.nvim_win_text_height(win, {}).all
-		for _, dividers_enabled in ipairs({ false, true }) do
-			for _, colors_enabled in ipairs({ false, true }) do
-				config.setup({
-					transcript = {
-						dividers = dividers_enabled,
-						header_highlights = colors_enabled and { user = "Special", assistant = "String" } or false,
-					},
-				})
-				transcript.flush()
-				h.eq(expected, lines())
-				h.eq(height, vim.api.nvim_win_text_height(win, {}).all)
-				h.eq(dividers_enabled and 1 or 0, #dividers())
-				h.eq(colors_enabled and 2 or 0, #headers())
-				if colors_enabled then
-					h.eq("Special", headers()[1][4].hl_group)
-					h.eq("String", headers()[2][4].hl_group)
+		h.with_cleanup(function(defer)
+			local original = vim.fn.getreginfo("z")
+			local unnamed = vim.fn.getreginfo('"')
+			defer(function()
+				vim.fn.setreg('"', unnamed)
+			end)
+			defer(function()
+				vim.fn.setreg("z", original)
+			end)
+			layout.open()
+			put("user", "user", "question")
+			put("assistant", "assistant", "answer\n```lua\nreturn true\n```")
+			local expected = lines()
+			local win = assert(layout.transcript_win())
+			local height = vim.api.nvim_win_text_height(win, {}).all
+			for _, dividers_enabled in ipairs({ false, true }) do
+				for _, colors_enabled in ipairs({ false, true }) do
+					config.setup({
+						transcript = {
+							dividers = dividers_enabled,
+							header_highlights = colors_enabled and { user = "Special", assistant = "String" } or false,
+						},
+					})
+					transcript.flush()
+					h.eq(expected, lines())
+					h.eq(height, vim.api.nvim_win_text_height(win, {}).all)
+					h.eq(dividers_enabled and 1 or 0, #dividers())
+					h.eq(colors_enabled and 2 or 0, #headers())
+					if colors_enabled then
+						h.eq("Special", headers()[1][4].hl_group)
+						h.eq("String", headers()[2][4].hl_group)
+					end
+					vim.api.nvim_win_call(win, function()
+						vim.cmd('silent normal! gg"zyG')
+					end)
+					h.eq(expected, vim.fn.getreg("z", 1, true))
 				end
-				vim.api.nvim_win_call(win, function()
-					vim.cmd('silent normal! gg"zyG')
-				end)
-				h.eq(expected, vim.fn.getreg("z", 1, true))
 			end
-		end
+		end)
 	end,
 
 	["streamed replacements rebind decorations without touching other namespaces"] = function()
@@ -161,31 +171,51 @@ return {
 	end,
 
 	["dividers are clipped to narrow windows and refreshed on resize"] = function()
-		layout.open()
-		put("user", "user", "question")
-		put("assistant", "assistant", "answer")
-		local primary = assert(layout.transcript_win())
-		vim.api.nvim_set_current_win(primary)
-		vim.cmd("vsplit")
-		local narrow = vim.api.nvim_get_current_win()
-		vim.api.nvim_win_set_config(narrow, { width = 8 })
-		vim.api.nvim_exec_autocmds("WinResized", {})
-		vim.cmd("redraw")
-		local width = math.max(vim.api.nvim_win_get_width(primary), vim.api.nvim_win_get_width(narrow))
-		h.eq(width, vim.fn.strdisplaywidth(dividers()[1][4].virt_text[1][1]))
-		for _, win in ipairs({ primary, narrow }) do
-			local position = vim.fn.screenpos(win, 4, 1)
-			h.eq("─", vim.fn.screenstring(position.row, position.col))
-			h.eq("─", vim.fn.screenstring(position.row, position.col + vim.api.nvim_win_get_width(win) - 1))
-			h.eq(position.row + 1, vim.fn.screenpos(win, 5, 1).row, "the divider does not wrap")
-		end
-		vim.api.nvim_win_close(narrow, true)
-		vim.api.nvim_exec_autocmds("WinResized", {})
-		h.eq(vim.api.nvim_win_get_width(primary), vim.fn.strdisplaywidth(dividers()[1][4].virt_text[1][1]))
+		h.with_cleanup(function(defer)
+			layout.open()
+			put("user", "user", "question")
+			put("assistant", "assistant", "answer")
+			local primary = assert(layout.transcript_win())
+			vim.api.nvim_set_current_win(primary)
+			vim.cmd("vsplit")
+			local narrow = vim.api.nvim_get_current_win()
+			defer(function()
+				if vim.api.nvim_win_is_valid(narrow) then
+					vim.api.nvim_win_close(narrow, true)
+				end
+			end)
+			vim.api.nvim_win_set_config(narrow, { width = 8 })
+			vim.api.nvim_exec_autocmds("WinResized", {})
+			vim.cmd("redraw")
+			local width = math.max(vim.api.nvim_win_get_width(primary), vim.api.nvim_win_get_width(narrow))
+			h.eq(width, vim.fn.strdisplaywidth(dividers()[1][4].virt_text[1][1]))
+			for _, win in ipairs({ primary, narrow }) do
+				local position = vim.fn.screenpos(win, 4, 1)
+				h.eq("─", vim.fn.screenstring(position.row, position.col))
+				h.eq("─", vim.fn.screenstring(position.row, position.col + vim.api.nvim_win_get_width(win) - 1))
+				h.eq(position.row + 1, vim.fn.screenpos(win, 5, 1).row, "the divider does not wrap")
+			end
+			vim.api.nvim_win_close(narrow, true)
+			vim.api.nvim_exec_autocmds("WinResized", {})
+			h.eq(vim.api.nvim_win_get_width(primary), vim.fn.strdisplaywidth(dividers()[1][4].virt_text[1][1]))
+		end)
 	end,
 
 	["default links respect user definitions and colorscheme refreshes"] = function()
-		with_highlights({ "PimUserHeader", "PimAssistantHeader", "PimCustomHeader", "PimDivider" }, function()
+		-- A colorscheme changes more than the four PIM groups. All existing groups are saved.
+		local highlights = vim.api.nvim_get_hl(0, {})
+		with_highlights(vim.tbl_keys(highlights), function(defer)
+			local colors_name = vim.g.colors_name
+			defer(function()
+				vim.g.colors_name = colors_name
+			end)
+			defer(function()
+				for name in pairs(vim.api.nvim_get_hl(0, {})) do
+					if highlights[name] == nil then
+						vim.api.nvim_set_hl(0, name, {})
+					end
+				end
+			end)
 			vim.api.nvim_set_hl(0, "PimUserHeader", { fg = "#123456" })
 			vim.cmd("highlight clear PimAssistantHeader")
 			layout.open()
@@ -196,12 +226,17 @@ return {
 			vim.api.nvim_exec_autocmds("ColorScheme", { pattern = "default" })
 			h.eq("Statement", vim.api.nvim_get_hl(0, { name = "PimAssistantHeader" }).link)
 			h.eq(0x123456, vim.api.nvim_get_hl(0, { name = "PimUserHeader" }).fg)
-			vim.api.nvim_create_autocmd("ColorScheme", {
+			local autocmd = vim.api.nvim_create_autocmd("ColorScheme", {
 				once = true,
 				callback = function()
 					vim.api.nvim_set_hl(0, "PimUserHeader", { fg = "#123456" })
 				end,
 			})
+			defer(function()
+				if #vim.api.nvim_get_autocmds({ id = autocmd }) > 0 then
+					vim.api.nvim_del_autocmd(autocmd)
+				end
+			end)
 			vim.cmd("colorscheme default")
 			h.eq("Statement", vim.api.nvim_get_hl(0, { name = "PimAssistantHeader" }).link)
 			h.eq(0x123456, vim.api.nvim_get_hl(0, { name = "PimUserHeader" }).fg)

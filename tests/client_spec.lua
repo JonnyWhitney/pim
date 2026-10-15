@@ -18,6 +18,109 @@ local function wait_for(predicate, what)
 end
 
 return {
+	["ordinary startup preserves command forms and user argument order"] = function()
+		for _, pi_cmd in ipairs({ "pi", { "pi", "--offline" } }) do
+			h.with_cleanup(function(defer)
+				local process = require("pim.rpc.process")
+				local captured
+				h.patch(defer, process, "spawn", function(opts)
+					captured = opts
+					return nil, "test stop"
+				end)
+				config.setup({ pi_cmd = pi_cmd, args = { "--extension", "external.lua", "--no-approve" } })
+				local started, err = client.start({ extra_args = { "--extension", "startup.lua", "--no-session" } })
+				h.eq(false, started)
+				h.eq("test stop", err)
+				local expected = type(pi_cmd) == "table" and vim.deepcopy(pi_cmd) or { pi_cmd }
+				vim.list_extend(expected, {
+					"--extension",
+					"external.lua",
+					"--no-approve",
+					"--extension",
+					"startup.lua",
+					"--no-session",
+					"--mode",
+					"rpc",
+				})
+				h.eq(expected, captured.cmd, "no bundled extension is appended")
+				h.eq(nil, captured.env, "no feature-owned environment is supplied")
+			end)
+		end
+	end,
+	["extension UI requests including the old reserved key are delivered normally"] = function()
+		h.with_cleanup(function(defer)
+			defer(client.reset)
+			---@type PimProcessSpawnOpts|nil
+			local captured
+			local delivered = {}
+			h.patch(defer, require("pim.rpc.process"), "spawn", function(opts)
+				captured = opts
+				return nil, "test stop"
+			end)
+			client.start({
+				on_ui_request = function(request)
+					delivered[#delivered + 1] = request
+				end,
+			})
+			local requests = {
+				{ type = "extension_ui_request", id = "select-1", method = "select", options = { "a" } },
+				{
+					type = "extension_ui_request",
+					method = "setStatus",
+					statusKey = "pim-agent-stop",
+					statusText = "ordinary",
+				},
+			}
+			local spawned = assert(captured, "process inputs were captured")
+			for _, request in ipairs(requests) do
+				spawned.on_line(vim.json.encode(request))
+			end
+			h.eq(requests, delivered)
+		end)
+	end,
+	["startup and lifecycle operations do not require feature-control modules"] = function()
+		for _, operation in ipairs({ "stop", "reset", "kill", "abort" }) do
+			h.with_cleanup(function(defer)
+				defer(client.reset)
+				local running, sent, stopped, killed = true, {}, false, false
+				h.patch(defer, require("pim.rpc.process"), "spawn", function()
+					return {
+						is_running = function()
+							return running
+						end,
+						write = function(line)
+							sent[#sent + 1] = vim.json.decode(line)
+							return true
+						end,
+						stop = function()
+							stopped = true
+							running = false
+						end,
+						kill = function()
+							killed = true
+							running = false
+						end,
+					}
+				end)
+				local original_require = require
+				h.patch(defer, _G, "require", function(name)
+					if name:match("^pim%.subagents") then
+						error("feature modules must not be required")
+					end
+					return original_require(name)
+				end)
+				h.eq(true, client.start())
+				client[operation]()
+				if operation == "abort" then
+					h.eq("abort", sent[1].type)
+				elseif operation == "kill" then
+					h.eq(true, killed)
+				else
+					h.eq(true, stopped)
+				end
+			end)
+		end
+	end,
 	["get_state round-trips through a real child process"] = function()
 		start_fake()
 		local result

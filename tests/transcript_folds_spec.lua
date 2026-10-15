@@ -121,39 +121,63 @@ return {
 	end,
 
 	["fold choices remain window local and new windows receive defaults"] = function()
-		layout.open()
-		put("call", "tool_calls", 4, false)
-		local primary = assert(layout.transcript_win())
-		vim.api.nvim_set_current_win(primary)
-		vim.cmd("vsplit")
-		local other = vim.api.nvim_get_current_win()
-		transcript.flush()
-		call(function()
-			vim.cmd("1foldopen")
+		h.with_cleanup(function(defer)
+			-- A separate guard ensures hide really closes the old windows.
+			vim.cmd("tabnew")
+			local guard = vim.api.nvim_get_current_tabpage()
+			local guard_buf = vim.api.nvim_get_current_buf()
+			defer(function()
+				if vim.api.nvim_buf_is_valid(guard_buf) then
+					vim.api.nvim_buf_delete(guard_buf, { force = true })
+				end
+			end)
+			defer(function()
+				if vim.api.nvim_tabpage_is_valid(guard) and #vim.api.nvim_list_tabpages() > 1 then
+					vim.api.nvim_set_current_tabpage(guard)
+					vim.cmd("tabclose!")
+				end
+			end)
+			defer(require("pim.lifecycle").cleanup)
+			vim.api.nvim_buf_set_lines(guard_buf, 0, -1, false, { "guard" })
+			layout.open()
+			put("call", "tool_calls", 4, false)
+			local primary = assert(layout.transcript_win())
+			vim.api.nvim_set_current_win(primary)
+			vim.cmd("vsplit")
+			local other = vim.api.nvim_get_current_win()
+			defer(function()
+				if vim.api.nvim_win_is_valid(other) then
+					vim.api.nvim_win_close(other, true)
+				end
+			end)
+			transcript.flush()
+			call(function()
+				vim.cmd("1foldopen")
+			end)
+			put("call", "tool_calls", 8, true)
+			h.eq(
+				-1,
+				call(function()
+					return vim.fn.foldclosed(1)
+				end)
+			)
+			h.eq(
+				1,
+				vim.api.nvim_win_call(other, function()
+					return vim.fn.foldclosed(1)
+				end)
+			)
+			vim.api.nvim_win_close(other, true)
+			layout.hide()
+			layout.open()
+			transcript.flush()
+			h.eq(
+				1,
+				call(function()
+					return vim.fn.foldclosed(1)
+				end)
+			)
 		end)
-		put("call", "tool_calls", 8, true)
-		h.eq(
-			-1,
-			call(function()
-				return vim.fn.foldclosed(1)
-			end)
-		)
-		h.eq(
-			1,
-			vim.api.nvim_win_call(other, function()
-				return vim.fn.foldclosed(1)
-			end)
-		)
-		vim.api.nvim_win_close(other, true)
-		layout.hide()
-		layout.open()
-		transcript.flush()
-		h.eq(
-			1,
-			call(function()
-				return vim.fn.foldclosed(1)
-			end)
-		)
 	end,
 
 	["short ranges reset and buffer recreation use fresh defaults"] = function()

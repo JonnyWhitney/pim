@@ -32,12 +32,24 @@ local function submission(busy, behavior)
 	client.prompt = function(_, _, callback)
 		callback(true)
 	end
-	vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "prompt" })
-	local ok, err = pcall(require("pim.ui.input").submit, behavior)
+	local ok, err = pcall(function()
+		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "prompt" })
+		require("pim.ui.input").submit(behavior)
+	end)
 	client.prompt = original
 	assert(ok, err)
 	put("b", { "new" })
 	return cursor(win)
+end
+
+local function own_split(defer)
+	local win = vim.api.nvim_get_current_win()
+	defer(function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+	end)
+	return win
 end
 
 return {
@@ -228,23 +240,25 @@ return {
 	end,
 
 	["windows follow independently and recreated windows start following"] = function()
-		local win, buf = fresh()
-		vim.api.nvim_set_current_win(win)
-		vim.cmd("vsplit")
-		local second = vim.api.nvim_get_current_win()
-		observe()
-		vim.api.nvim_win_set_cursor(win, { 1, 0 })
-		put("b", { "new" })
-		h.eq(1, cursor(win))
-		h.eq(6, cursor(second))
-		vim.api.nvim_win_close(second, true)
-		vim.api.nvim_set_current_win(win)
-		vim.cmd("vsplit")
-		second = vim.api.nvim_get_current_win()
-		h.eq(buf, vim.api.nvim_win_get_buf(second))
-		put("c", { "latest" })
-		h.eq(8, cursor(second))
-		h.eq(1, cursor(win))
+		h.with_cleanup(function(defer)
+			local win, buf = fresh()
+			vim.api.nvim_set_current_win(win)
+			vim.cmd("vsplit")
+			local second = own_split(defer)
+			observe()
+			vim.api.nvim_win_set_cursor(win, { 1, 0 })
+			put("b", { "new" })
+			h.eq(1, cursor(win))
+			h.eq(6, cursor(second))
+			vim.api.nvim_win_close(second, true)
+			vim.api.nvim_set_current_win(win)
+			vim.cmd("vsplit")
+			second = own_split(defer)
+			h.eq(buf, vim.api.nvim_win_get_buf(second))
+			put("c", { "latest" })
+			h.eq(8, cursor(second))
+			h.eq(1, cursor(win))
+		end)
 	end,
 
 	["reset starts following again"] = function()
@@ -322,17 +336,19 @@ return {
 	end,
 
 	["explicit resume affects only the primary window"] = function()
-		local win, buf = fresh()
-		vim.api.nvim_set_current_win(win)
-		vim.cmd("vsplit")
-		local second = vim.api.nvim_get_current_win()
-		observe()
-		vim.api.nvim_win_set_cursor(win, { 1, 0 })
-		vim.api.nvim_win_set_cursor(second, { 1, 0 })
-		observe()
-		view.resume(win, buf)
-		put("b", { "new" })
-		h.eq(6, cursor(win))
-		h.eq(1, cursor(second))
+		h.with_cleanup(function(defer)
+			local win, buf = fresh()
+			vim.api.nvim_set_current_win(win)
+			vim.cmd("vsplit")
+			local second = own_split(defer)
+			observe()
+			vim.api.nvim_win_set_cursor(win, { 1, 0 })
+			vim.api.nvim_win_set_cursor(second, { 1, 0 })
+			observe()
+			view.resume(win, buf)
+			put("b", { "new" })
+			h.eq(6, cursor(win))
+			h.eq(1, cursor(second))
+		end)
 	end,
 }

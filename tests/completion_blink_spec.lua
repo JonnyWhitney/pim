@@ -4,18 +4,17 @@ local data = require("pim.completion.data")
 local layout = require("pim.ui.layout")
 
 local function with_input(fn)
-	local virtualedit = vim.o.virtualedit
-	vim.o.virtualedit = "onemore"
-	layout.open()
-	local original = data.command_candidates
-	local ok, err = pcall(fn, layout.input_buf())
-	data.command_candidates = original
-	data.reset()
-	layout.destroy()
-	vim.o.virtualedit = virtualedit
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		h.patch(defer, vim.o, "virtualedit", "onemore")
+		local original = data.command_candidates
+		defer(function()
+			data.command_candidates = original
+		end)
+		defer(data.reset)
+		defer(layout.destroy)
+		layout.open()
+		return fn(layout.input_buf(), defer)
+	end)
 end
 
 local function prompt(text, col, row)
@@ -43,7 +42,7 @@ local function metadata()
 end
 
 return {
-	["command context is enabled without helper or backend activation"] = function()
+	["command completion is available in the input buffer"] = function()
 		with_input(function()
 			local source = blink.new()
 			h.eq(nil, blink.setup)
@@ -84,13 +83,18 @@ return {
 	end,
 
 	["Markdown transcript and unrelated buffers are rejected"] = function()
-		with_input(function(buf)
+		with_input(function(buf, defer)
 			local source = blink.new()
 			metadata()
 			local ctx = prompt("/rpc")
 			ctx.bufnr = buf + 1000
 			h.eq({}, candidates(source, ctx).items)
 			local ordinary = vim.api.nvim_create_buf(false, true)
+			defer(function()
+				if vim.api.nvim_buf_is_valid(ordinary) then
+					vim.api.nvim_buf_delete(ordinary, { force = true })
+				end
+			end)
 			for _, other in ipairs({ ordinary, assert(layout.transcript_buf()) }) do
 				vim.api.nvim_win_set_buf(0, other)
 				vim.bo.modifiable = true
@@ -100,7 +104,6 @@ return {
 				h.eq({}, candidates(source, ctx).items)
 			end
 			vim.api.nvim_win_set_buf(0, buf)
-			vim.api.nvim_buf_delete(ordinary, { force = true })
 		end)
 	end,
 

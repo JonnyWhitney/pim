@@ -5,27 +5,25 @@ local dialogs = require("pim.ui.dialogs")
 
 local tests_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
-local original_select = vim.ui.select
-local original_input = vim.ui.input
-local original_respond = client.respond_ui
-
 local function with_stubs(stubs, fn)
-	local responses = {}
-	vim.ui.select = stubs.select or original_select
-	vim.ui.input = stubs.input or original_input
-	---@diagnostic disable-next-line: duplicate-set-field
-	client.respond_ui = function(id, payload)
-		responses[#responses + 1] = { id = id, payload = payload }
-	end
-	local ok, err = pcall(fn, responses)
-	vim.ui.select = original_select
-	vim.ui.input = original_input
-	client.respond_ui = original_respond
-	dialogs.reset()
-	h.settle(50)
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		local responses = {}
+		if stubs.select then
+			h.patch(defer, vim.ui, "select", stubs.select)
+		end
+		if stubs.input then
+			h.patch(defer, vim.ui, "input", stubs.input)
+		end
+		h.patch(defer, client, "respond_ui", function(id, payload)
+			responses[#responses + 1] = { id = id, payload = payload }
+		end)
+		-- Active dialogs and scheduled queue work are cleared before stubs are restored.
+		defer(function()
+			h.settle(50)
+		end)
+		defer(dialogs.reset)
+		return fn(responses)
+	end)
 end
 
 local function wait_for_responses(responses, count)
@@ -181,25 +179,34 @@ return {
 	end,
 
 	["editor dialog opens inside the pi tabpage"] = function()
-		local layout = require("pim.ui.layout")
-		layout.open()
-		local pi_tab = vim.api.nvim_get_current_tabpage()
+		h.with_cleanup(function(defer)
+			local layout = require("pim.ui.layout")
+			layout.open()
+			local pi_tab = vim.api.nvim_get_current_tabpage()
 
-		vim.cmd("tabnew")
-		local other_tab = vim.api.nvim_get_current_tabpage()
+			vim.cmd("tabnew")
+			local other_tab = vim.api.nvim_get_current_tabpage()
+			local other_buf = vim.api.nvim_get_current_buf()
+			defer(function()
+				if vim.api.nvim_buf_is_valid(other_buf) then
+					vim.api.nvim_buf_delete(other_buf, { force = true })
+				end
+			end)
+			defer(function()
+				if vim.api.nvim_tabpage_is_valid(other_tab) then
+					vim.api.nvim_set_current_tabpage(other_tab)
+					vim.cmd("tabclose!")
+				end
+			end)
 
-		with_stubs({}, function(responses)
-			dialogs.handle({ id = "e3", method = "editor", title = "Edit me", prefill = "" })
-			h.eq(pi_tab, vim.api.nvim_get_current_tabpage(), "the editor split lands in the pi tab")
-			h.ok(vim.api.nvim_get_current_tabpage() ~= other_tab, "not in the user's own tab")
-			vim.api.nvim_feedkeys("q", "x", false)
-			wait_for_responses(responses, 1)
+			with_stubs({}, function(responses)
+				dialogs.handle({ id = "e3", method = "editor", title = "Edit me", prefill = "" })
+				h.eq(pi_tab, vim.api.nvim_get_current_tabpage(), "the editor split lands in the pi tab")
+				h.ok(vim.api.nvim_get_current_tabpage() ~= other_tab, "not in the user's own tab")
+				vim.api.nvim_feedkeys("q", "x", false)
+				wait_for_responses(responses, 1)
+			end)
 		end)
-
-		if vim.api.nvim_tabpage_is_valid(other_tab) then
-			vim.api.nvim_set_current_tabpage(other_tab)
-			vim.cmd("tabclose")
-		end
 	end,
 
 	["set_editor_text replaces the input buffer"] = function()
@@ -207,6 +214,36 @@ return {
 		dialogs.handle({ method = "set_editor_text", text = "from extension" })
 		local buf = assert(require("pim.ui.layout").input_buf())
 		h.eq({ "from extension" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+	end,
+
+	["setStatus updates and clears ordinary and formerly reserved keys"] = function()
+		local state = require("pim.state")
+		for _, key in ipairs({ "external-status", "pim-agent-stop" }) do
+			dialogs.handle({ method = "setStatus", statusKey = key, statusText = "extension ready" })
+			h.eq("extension ready", state.get().ext_status[key])
+			h.ok(require("pim.ui.statusline").build(state.get()):find("extension ready", 1, true))
+			dialogs.handle({ method = "setStatus", statusKey = key, statusText = "updated" })
+			h.eq("updated", state.get().ext_status[key])
+			dialogs.handle({ method = "setStatus", statusKey = key, statusText = nil })
+			h.eq(nil, state.get().ext_status[key])
+		end
+	end,
+	["notifications retain their text and levels"] = function()
+		h.with_cleanup(function(defer)
+			local messages = {}
+			h.patch(defer, vim, "notify", function(message, level)
+				messages[#messages + 1] = { message, level }
+			end)
+			for _, case in ipairs({
+				{ "info", vim.log.levels.INFO },
+				{ "warning", vim.log.levels.WARN },
+				{ "error", vim.log.levels.ERROR },
+				{ "unknown", vim.log.levels.INFO },
+			}) do
+				dialogs.handle({ method = "notify", message = "ordinary notification", notifyType = case[1] })
+				h.eq({ "[pi] ordinary notification", case[2] }, messages[#messages])
+			end
+		end)
 	end,
 
 	["setWidget surfaces its first line in the winbar"] = function()
@@ -231,23 +268,25 @@ return {
 	["end-to-end: select dialog round-trips through fake pi"] = function()
 		config.setup({ pi_cmd = { "nvim", "-l", tests_dir .. "/fake_pi.lua", "dialog" } })
 
-		---@diagnostic disable-next-line: duplicate-set-field
-		vim.ui.select = function(items, _, on_choice)
-			on_choice(items[2])
-		end
+		h.with_cleanup(function(defer)
+			h.patch(defer, vim.ui, "select", function(items, _, on_choice)
+				on_choice(items[2])
+			end)
+			defer(function()
+				h.settle(50)
+			end)
+			defer(require("pim.lifecycle").cleanup)
 
-		require("pim").start()
+			require("pim").start()
 
-		local layout = require("pim.ui.layout")
-		vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "ask me" })
-		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR><CR>", true, false, true), "x", false)
+			local layout = require("pim.ui.layout")
+			vim.api.nvim_buf_set_lines(assert(layout.input_buf()), 0, -1, false, { "ask me" })
+			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR><CR>", true, false, true), "x", false)
 
-		local ok, err = pcall(h.wait_until, function()
-			local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
-			return table.concat(lines, "\n"):find("You picked: beta", 1, true) ~= nil
-		end, "the dialog answer to come back through fake pi", 10000)
-
-		vim.ui.select = original_select
-		h.ok(ok, tostring(err))
+			h.wait_until(function()
+				local lines = vim.api.nvim_buf_get_lines(assert(layout.transcript_buf()), 0, -1, false)
+				return table.concat(lines, "\n"):find("You picked: beta", 1, true) ~= nil
+			end, "the dialog answer to come back through fake pi", 10000)
+		end)
 	end,
 }

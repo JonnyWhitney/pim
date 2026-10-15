@@ -44,6 +44,61 @@ function M.settle(ms)
 	vim.wait(ms or 100)
 end
 
+-- body(defer) is protected. defer(callback) registers a no-argument cleanup.
+-- Cleanups are protected separately and are run in reverse registration order.
+-- The body failure is reported first, followed by every cleanup failure.
+function M.with_cleanup(body)
+	local cleanups = {}
+	local function defer(callback)
+		assert(type(callback) == "function", "cleanup must be a function")
+		cleanups[#cleanups + 1] = callback
+	end
+	local function pack(...)
+		return { n = select("#", ...), ... }
+	end
+	local result = pack(xpcall(body, debug.traceback, defer))
+	local errors = {}
+	local cleanup_failed = not result[1] and type(result[2]) == "table" and result[2].cleanup_failed == true
+	if not result[1] then
+		errors[#errors + 1] = tostring(result[2])
+	end
+	for index = #cleanups, 1, -1 do
+		local ok, err = xpcall(cleanups[index], debug.traceback)
+		if not ok then
+			cleanup_failed = true
+			errors[#errors + 1] = "cleanup failed: " .. tostring(err)
+		end
+	end
+	if #errors > 0 then
+		local message = table.concat(errors, "\n")
+		if cleanup_failed then
+			-- A local error marker allows the runner to stop after contaminated cleanup.
+			error(
+				setmetatable({ cleanup_failed = true, message = message }, {
+					__tostring = function(err)
+						return err.message
+					end,
+				}),
+				0
+			)
+		end
+		error(message, 0)
+	end
+	return unpack(result, 2, result.n)
+end
+
+-- patch(defer, object, key, replacement) captures the exact current field value.
+-- Restoration is registered before replacement. nil and false are preserved.
+-- Nested patches are restored correctly by the reverse cleanup order.
+function M.patch(defer, object, key, replacement)
+	local original = object[key]
+	defer(function()
+		object[key] = original
+	end)
+	object[key] = replacement
+	return original
+end
+
 -- Specs share one headless Neovim process. Runtime cleanup uses the application boundary.
 function M.reset_all()
 	require("pim.lifecycle").cleanup()

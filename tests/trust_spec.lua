@@ -2,30 +2,30 @@ local h = require("helpers")
 local trust = require("pim.trust")
 
 local function with_temp_dir(fn)
-	local directory = vim.fn.tempname()
-	vim.fn.mkdir(directory, "p")
-	local original = vim.env.PI_CODING_AGENT_DIR
-	vim.env.PI_CODING_AGENT_DIR = directory
-	local ok, err = pcall(fn, directory)
-	vim.env.PI_CODING_AGENT_DIR = original
-	vim.fn.delete(directory, "rf")
-	if not ok then
-		error(err, 0)
-	end
+	return h.with_cleanup(function(defer)
+		local directory = vim.fn.tempname()
+		defer(function()
+			h.eq(0, vim.fn.delete(directory, "rf"))
+		end)
+		vim.fn.mkdir(directory, "p")
+		h.patch(defer, vim.env, "PI_CODING_AGENT_DIR", directory)
+		return fn(directory)
+	end)
 end
 
 local function write(path, content)
 	vim.fn.mkdir(vim.fs.dirname(path), "p")
-	local file = assert(io.open(path, "w"))
-	assert(file:write(content))
-	assert(file:close())
+	h.eq(0, vim.fn.writefile(vim.split(content, "\n", { plain = true }), path, "b"))
 end
 
 local function read(path)
-	local file = assert(io.open(path, "r"))
-	local content = file:read("*a")
-	file:close()
-	return content
+	return h.with_cleanup(function(defer)
+		local file = assert(io.open(path, "r"))
+		defer(function()
+			assert(file:close())
+		end)
+		return assert(file:read("*a"))
+	end)
 end
 
 return {
