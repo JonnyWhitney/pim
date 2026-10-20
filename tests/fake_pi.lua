@@ -468,18 +468,18 @@ local function handle(cmd)
 		send({ type = "response", id = cmd.id, command = "set_thinking_level", success = true })
 		send({ type = "thinking_level_changed", level = cmd.level })
 	elseif cmd.type == "get_session_stats" then
-		local usage = nil
+		local context_usage = nil
 		if scenario == "nullcontext" then
-			usage = { tokens = vim.NIL, contextWindow = 100000, percent = vim.NIL }
+			context_usage = { tokens = vim.NIL, contextWindow = 100000, percent = vim.NIL }
 		elseif scenario ~= "nocontext" then
-			usage = { tokens = 12000, contextWindow = 100000, percent = 12 }
+			context_usage = { tokens = 12000, contextWindow = 100000, percent = 12 }
 		end
 		send({
 			type = "response",
 			id = cmd.id,
 			command = "get_session_stats",
 			success = true,
-			data = { sessionId = state.sessionId, contextUsage = usage },
+			data = { sessionId = state.sessionId, contextUsage = context_usage },
 		})
 	elseif cmd.type == "bash" then
 		local command = tostring(cmd.command)

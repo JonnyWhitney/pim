@@ -490,9 +490,12 @@ return {
 
 		h.eq({ "clear_queue", "abort" }, sent)
 		h.ok(
-			vim.iter(notified):any(function(item)
-				return item.message:find("clear_queue failed", 1, true) ~= nil
-			end),
+			vim.iter(notified):any(
+				---@param item { message: string, level: integer? }
+				function(item)
+					return item.message:find("clear_queue failed", 1, true) ~= nil
+				end
+			),
 			"the failed recovery is reported"
 		)
 	end,

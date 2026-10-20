@@ -17,6 +17,6 @@ nvim --clean --headless -c "lua
 
 # --check returns a nonzero status for each warning at --checklevel or above.
 lua-language-server --check "$PWD" \
-	--checklevel=Warning \
-	--configpath="$workdir/luarc.json" \
-	--logpath="$workdir/log"
+    --checklevel=Hint \
+    --configpath="$workdir/luarc.json" \
+    --logpath="$workdir/log"
