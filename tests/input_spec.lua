@@ -121,9 +121,12 @@ return {
 		end
 
 		h.ok(
-			vim.iter(notified):any(function(n)
-				return n.message:find("<Up>", 1, true) ~= nil
-			end),
+			vim.iter(notified):any(
+				---@param n { message: string, level: integer? }
+				function(n)
+					return n.message:find("<Up>", 1, true) ~= nil
+				end
+			),
 			"the user is told how to recall the rejected prompt, got: " .. vim.inspect(notified)
 		)
 

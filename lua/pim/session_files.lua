@@ -77,9 +77,9 @@ function M.list_dir(dir)
 			local path = vim.fs.joinpath(dir, name)
 			local file = io.open(path, "r")
 			if file then
-				local content = file:read("*a")
+				local file_content = file:read("*a")
 				file:close()
-				local info = M.parse_lines(vim.split(content, "\n", { plain = true, trimempty = true }))
+				local info = M.parse_lines(vim.split(file_content, "\n", { plain = true, trimempty = true }))
 				if info then
 					local stat = vim.uv.fs_stat(path)
 					info.path = path

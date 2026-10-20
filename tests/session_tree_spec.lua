@@ -134,8 +134,8 @@ return {
 		)
 		h.eq(
 			{ "user", "assistant", "toolResult", "assistant", "assistant" },
-			vim.tbl_map(function(message)
-				return message.role
+			vim.tbl_map(function(msg)
+				return msg.role
 			end, assert(tree.preview_messages(data, rows[2].id)))
 		)
 		h.eq(original, data)

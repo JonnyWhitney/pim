@@ -227,7 +227,7 @@ return {
 	end,
 
 	["trust picker shows an inherited decision and marks its matching parent choice"] = function()
-		with_trust_project(function(project, parent)
+		with_trust_project(function(_, parent)
 			local trust = require("pim.trust")
 			trust.trust(parent)
 			with_select(function(items, opts)
