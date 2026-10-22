@@ -34,7 +34,6 @@ local function item(command, ctx)
 		label = text,
 		filterText = text,
 		kind = 1,
-		labelDetails = { description = command.source },
 		client_name = command.source,
 		documentation = command.description and { kind = "plaintext", value = command.description } or nil,
 		insertTextFormat = 1,

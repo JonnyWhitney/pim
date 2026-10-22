@@ -306,6 +306,23 @@ File completion must be supplied by a separate source, such as Blink's `path`
 provider. Recursive project-file search is not supplied by pim. An initial `/`
 may be matched by both command and path sources.
 
+Pim input is a `nofile` buffer named `pim://pi input`. Two Blink defaults
+must be adjusted for path and word suggestions:
+
+- Paths are normally resolved from the buffer filename. In pim input, the
+  working directory must be used instead. Otherwise, `./` is resolved to
+  nonexistent `pim:`, and `../` is resolved to the current directory.
+- Word suggestions normally exclude `nofile` buffers. Pim input and
+  transcript buffers must be included explicitly.
+
+Both adjustments are provided in [`examples/blink.lua`](examples/blink.lua).
+They are restricted to pim input. Filename-based path resolution and ordinary
+visible-buffer selection are retained elsewhere. Existing custom callbacks
+must be incorporated into these options rather than silently replaced.
+
+Relative paths in the example follow Neovim's current working directory.
+That directory must remain aligned with the directory where pi was started.
+
 Menus, documentation, ghost text, selection, and keybindings are left to Blink.
 Your `preselect = false` and `auto_insert = false` settings can be retained.
 No native completion popup, omni mappings, or completion-option overrides are
