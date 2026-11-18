@@ -13,6 +13,7 @@ local function initial()
 	return {
 		connected = false,
 		run_active = false,
+		run_aborted = false,
 		is_streaming = false,
 		is_compacting = false,
 		bash_running = false,
@@ -92,6 +93,7 @@ function M.apply_rpc_state(rpc)
 	M.update({
 		connected = true,
 		run_active = rpc.isStreaming or false,
+		run_aborted = not rpc.isStreaming and rpc.sessionId == state.session_id and state.run_aborted or false,
 		is_streaming = rpc.isStreaming or false,
 		is_compacting = rpc.isCompacting or false,
 		model = rpc.model or M.NONE,
@@ -116,11 +118,17 @@ end
 function M.handle_event(event)
 	local kind = event.type
 	if kind == "agent_start" then
-		M.update({ run_active = true, is_streaming = true })
+		M.update({ run_active = true, is_streaming = true, run_aborted = false })
 	elseif kind == "agent_end" then
 		M.update({ is_streaming = false, retrying = event.willRetry or false })
 	elseif kind == "agent_settled" then
-		M.update({ run_active = false, is_streaming = false, is_compacting = false, retrying = false })
+		M.update({
+			run_active = false,
+			is_streaming = false,
+			is_compacting = false,
+			retrying = false,
+			run_aborted = event.aborted == true,
+		})
 	elseif kind == "compaction_start" then
 		M.update({ is_compacting = true })
 	elseif kind == "compaction_end" then

@@ -88,6 +88,7 @@ local function handle_tool_event(event)
 		preview = event_preview(event, arguments),
 		running = not final,
 		isError = final and event.isError or nil,
+		durationMs = final and event.durationMs or nil,
 		result = result,
 	}
 	transcript.set(

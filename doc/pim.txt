@@ -37,7 +37,7 @@ hidden. Folds can be toggled with <Tab> or native Neovim fold commands.
 Manual choices are preserved per window during updates. Defaults are reapplied
 when history is reloaded or a buffer or window is recreated.
 
-Neovim nightly and Pi 0.99.0 or newer are required.
+Neovim nightly and Pi 1.5.2 or newer are required.
 The Neovim client is written in Lua without plugin dependencies.
 Other Neovim releases are not supported.
 
@@ -453,7 +453,7 @@ Queued steer and follow-up messages use virtual lines. You cannot yank them.
 ==============================================================================
 8. DEVELOPMENT                                                *pim-development*
 
-Neovim nightly and Pi 0.99.0 or newer are required. Stylua 2.5.2 and
+Neovim nightly and Pi 1.5.2 or newer are required. Stylua 2.5.2 and
 lua-language-server 3.18.2 are pinned in mise.toml for Lua development.
 Neovim and Pi must be installed separately.
 

@@ -491,6 +491,13 @@ return {
 		h.eq("▸ result(bash)", block.lines[1])
 	end,
 
+	["completed tools show reported duration"] = function()
+		local block = tool_renderer.execution({ toolName = "bash", isError = true, durationMs = 1250 })
+		h.eq("▸ result(bash) ✘ error [1.25 s]", block.lines[1])
+		block = tool_renderer.execution({ toolName = "bash", durationMs = 0 })
+		h.eq("▸ result(bash) [0 ms]", block.lines[1])
+	end,
+
 	["failed tool execution is marked"] = function()
 		local block = tool_renderer.execution({ toolName = "bash", isError = true, result = "boom" })
 		h.eq("▸ result(bash) ✘ error", block.lines[1])

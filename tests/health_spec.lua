@@ -27,15 +27,16 @@ local function check_version(version)
 end
 
 return {
-	["Pi 0.99.0 is required"] = function()
+	["Pi 1.5.2 is required"] = function()
 		for _, case in ipairs({
-			{ version = "0.98.9", level = "error" },
-			{ version = "0.99.0", level = "ok" },
-			{ version = "0.99.1", level = "ok" },
+			{ version = "0.99.0", level = "error" },
+			{ version = "1.5.1", level = "error" },
+			{ version = "1.5.2", level = "ok" },
+			{ version = "1.5.3", level = "ok" },
 		}) do
 			local found
 			for _, entry in ipairs(check_version(case.version)) do
-				if entry.message:find(case.version, 1, true) and entry.message:find("0.99.0", 1, true) then
+				if entry.message:find(case.version, 1, true) and entry.message:find("1.5.2", 1, true) then
 					found = entry.level
 				end
 			end
@@ -43,7 +44,7 @@ return {
 		end
 	end,
 	["health retains editor Pi and session checks without feature checks"] = function()
-		local messages = check_version("0.99.1")
+		local messages = check_version("1.5.2")
 		local text = table.concat(
 			vim.tbl_map(function(entry)
 				return entry.message
@@ -52,7 +53,7 @@ return {
 		)
 		h.ok(text:find("Neovim >= 0.12", 1, true))
 		h.ok(text:find("pi binary found:", 1, true))
-		h.ok(text:find("pi version: 0.99.1", 1, true))
+		h.ok(text:find("pi version: 1.5.2", 1, true))
 		h.ok(text:find("session directory", 1, true))
 		h.ok(not text:lower():find("subagent", 1, true))
 		h.ok(not text:lower():find("bundl", 1, true))

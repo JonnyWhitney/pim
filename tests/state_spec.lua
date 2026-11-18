@@ -253,6 +253,29 @@ return {
 		h.ok(not unstarted:find("connecting", 1, true), "no connecting marker after a failed spawn")
 	end,
 
+	["winbar reports only explicit aborts for the current session"] = function()
+		local function shows_abort()
+			return statusline.build(state.get()):find("Aborted", 1, true) ~= nil
+		end
+
+		state.apply_rpc_state({ sessionId = "one" })
+		state.handle_event({ type = "agent_start" })
+		state.handle_event({ type = "agent_settled", aborted = true })
+		h.eq(false, state.is_busy())
+		h.eq(true, shows_abort())
+		state.apply_rpc_state({ sessionId = "one" })
+		h.eq(true, shows_abort())
+		state.handle_event({ type = "agent_start" })
+		h.eq(false, shows_abort())
+		state.handle_event({ type = "agent_settled", aborted = false })
+		h.eq(false, shows_abort())
+		state.handle_event({ type = "agent_settled" })
+		h.eq(false, shows_abort())
+		state.handle_event({ type = "agent_settled", aborted = true })
+		state.apply_rpc_state({ sessionId = "two" })
+		h.eq(false, shows_abort())
+	end,
+
 	["winbar stays active between agent_end and agent_settled"] = function()
 		local bar = statusline.build({ connected = true, run_active = true, ext_status = {} })
 		h.ok(bar:find("⠋", 1, true), "run_active keeps the activity marker visible, got: " .. bar)

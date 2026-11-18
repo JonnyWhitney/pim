@@ -9,7 +9,7 @@ Markdown Treesitter, and the Pi RPC interface are supported.
 ## Requirements
 
 - Neovim nightly. Other Neovim releases are not supported.
-- Pi 0.99.0 or newer.
+- Pi 1.5.2 or newer.
   `pi` must be on `$PATH` or set through `pi_cmd`.
 
 ## Install
@@ -404,7 +404,7 @@ Queued steer and follow-up messages are virtual lines. You cannot yank them.
 
 ## Development
 
-Neovim nightly and Pi 0.99.0 or newer are required. Stylua 2.5.2 and
+Neovim nightly and Pi 1.5.2 or newer are required. Stylua 2.5.2 and
 lua-language-server 3.18.2 are pinned in `mise.toml` for Lua development.
 Neovim and Pi must be installed separately.
 

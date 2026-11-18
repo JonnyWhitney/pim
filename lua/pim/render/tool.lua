@@ -164,6 +164,12 @@ function M.execution(exec)
 		status = " ✘ error"
 	end
 
+	local duration = exec.durationMs
+	if not exec.running and type(duration) == "number" and duration >= 0 then
+		local elapsed = duration < 1000 and ("%.0f ms"):format(duration) or ("%.2f s"):format(duration / 1000)
+		status = status .. " [" .. elapsed .. "]"
+	end
+
 	local lines = { header("result", exec.toolName, exec.args, status) }
 	local folds = {}
 	local last = append_output(lines, exec, result_text(exec.result))

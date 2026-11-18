@@ -8,6 +8,7 @@
 
 ---@class PimApplicationState : PimBusyState
 ---@field connected boolean|nil
+---@field run_aborted boolean|nil
 ---@field model PimModel|nil
 ---@field thinking_level string|nil
 ---@field session_id string|nil
@@ -52,6 +53,7 @@
 ---@field toolCallId string|nil
 ---@field toolName string|nil
 ---@field isError boolean|nil
+---@field durationMs number|nil
 ---@field details table|nil
 ---@field command string|nil
 ---@field output string|nil
@@ -79,6 +81,7 @@
 ---@field preview string|nil
 ---@field running boolean|nil
 ---@field isError boolean|nil
+---@field durationMs number|nil
 ---@field result PimToolResult|string|nil
 
 ---@class PimEvent
@@ -92,6 +95,8 @@
 ---@field partialResult PimToolResult|string|nil
 ---@field result PimToolResult|string|nil
 ---@field isError boolean|nil
+---@field durationMs number|nil
+---@field aborted boolean|nil
 ---@field steering string[]|nil
 ---@field followUp string[]|nil
 ---@field willRetry boolean|nil

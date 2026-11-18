@@ -85,6 +85,7 @@ return {
 				type = "tool_execution_end",
 				toolCallId = "external-1",
 				toolName = "subagent",
+				durationMs = 42,
 				result = { content = { { type = "text", text = "final text" } }, details = details },
 			})
 			h.eq(3, #calls)
@@ -95,7 +96,7 @@ return {
 			h.eq(nil, calls[1].opts)
 			h.eq(nil, calls[2].opts)
 			h.eq({ final = true }, calls[3].opts)
-			h.eq({ "▸ result(subagent)", "```", "final text", "```" }, calls[3].rendered.lines)
+			h.eq({ "▸ result(subagent) [42 ms]", "```", "final text", "```" }, calls[3].rendered.lines)
 			h.eq({ { first = 0, last = 3, kind = "tool_results" } }, calls[3].rendered.folds)
 			h.ok(not transcript_text():find("partial text", 1, true))
 			events.load_messages({
@@ -107,6 +108,7 @@ return {
 					role = "toolResult",
 					toolCallId = "external-1",
 					toolName = "subagent",
+					durationMs = 42,
 					content = { { type = "text", text = "final text" } },
 					details = details,
 				},

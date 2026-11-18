@@ -74,6 +74,7 @@ local function render_tool_result(message, opts)
 		toolName = message.toolName,
 		args = arguments,
 		isError = message.isError,
+		durationMs = message.durationMs,
 		result = {
 			content = message.content,
 			details = message.details,

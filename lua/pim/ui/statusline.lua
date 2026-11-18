@@ -76,6 +76,8 @@ function M.build(state)
 		parts[#parts + 1] = SPINNER[spinner_index] .. " !"
 	elseif state_store.is_busy(state) then
 		parts[#parts + 1] = SPINNER[spinner_index]
+	elseif state.run_aborted and state.connected and not (state.spawn_error or state.exit_code or state.stopped) then
+		parts[#parts + 1] = "Aborted"
 	end
 
 	if state.session_name then
